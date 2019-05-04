@@ -1,0 +1,8 @@
+name = "Duckietown"
+uuid = "dfb60602-5a03-11e9-33aa-afd801aa79cf"
+authors = ["Tejan Karmali <tejank10@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+Gym = "56b9baea-2481-11e9-37ae-75904354ad8c"
+YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
