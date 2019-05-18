@@ -1,28 +1,11 @@
-# coding=utf-8
-from __future__ import division
+struct DoneRewardInfo
+    done::Bool
+    done_why::String
+    done_code::String
+    reward::Real
+end
 
-import geometry
-
-@dataclass
-class DoneRewardInfo:
-    done: bool
-    done_why: str
-    done_code: str
-    reward: float
-
-
-using Gym
-using YAML
-using Gym: spaces
-from gym.utils import seeding
-
-from .collision import *
-# Objects utility code
-from .objects import WorldObj, DuckieObj, TrafficLightObj, DuckiebotObj
-# Graphics utility code
-from .objmesh import *
 # Randomization code
-from .randomization import Randomizer
 
 # Rendering window size
 WINDOW_WIDTH = 800
@@ -92,7 +75,7 @@ DEFAULT_FRAMERATE = 30
 
 DEFAULT_MAX_STEPS = 1500
 
-DEFAULT_MAP_NAME = 'udem1'
+DEFAULT_MAP_NAME = "udem1"
 
 DEFAULT_FRAME_SKIP = 1
 
@@ -101,9 +84,6 @@ DEFAULT_ACCEPT_START_ANGLE_DEG = 60
 REWARD_INVALID_POSE = -1000
 
 MAX_SPAWN_ATTEMPTS = 5000
-
-LanePosition0 = namedtuple('LanePosition', 'dist dot_dir angle_deg angle_rad')
-
 
 struct LanePosition
     lane_position
@@ -114,7 +94,7 @@ struct LanePosition
 end
 
 function as_json_dict(lp::LanePosition)
-    """ Serialization-friendly format. """
+    ### Serialization-friendly format. ###
     return Dict([:dist=>lp.dist,
                  :dot_dir=>lp.dot_dir,
                  :angle_deg=>lp.angle_deg,
@@ -127,48 +107,56 @@ struct NotInLane <: Exception end
 
 
 mutable struct Simulator <: Gym.AbstractEnv
-    #=
-    Simple road simulator to test RL training.
-    Draws a road with turns using OpenGL, and simulates
-    basic differential-drive dynamics.
-    =#
-
-    metadata = Dict([
-        'render.modes'=> ['human', 'rgb_array', 'app'],
-        'video.frames_per_second'=> 30
-    ])
-
-    cur_pos::Array
-    cam_offset::Array
-    road_tile_size::Real
-    seed_value::Integer
-    full_transparency::Bool
-    map_name::String
-    map_file_path::StringOrNothing
-    map_data::StringOrNothing       # The parsed content of the map_file
-    max_steps::Integer              # Maximum number of steps per episode
+    ##
+    #Simple road simulator to test RL training.
+    #Draws a road with turns using OpenGL, and simulates
+    #basic differential-drive dynamics.
+    ##
+    rng::MersenneTwister
+    _map::Map
+    max_steps::Int              # Maximum number of steps per episode
     draw_curve::Bool                # Flag to draw the road curve
     draw_bbox::Bool                 # Flag to draw bounding boxes
     domain_rand::Bool               # Flag to enable/disable domain randomization
-    randomizer
+    randomizer::Union{Randomizer, Nothing}
     frame_rate::Integer             # Frame rate to run at
     frame_skip::Bool                # Number of frames to skip per action
     delta_time::Real
+    camera_width::Real
+    camera_height::Real
+    robot_speed::Real
     action_space::Box
     observation_space::Box
-    reward_range::NTuple{Int, 2}
-    window                          # Window for displaying the environment to humans
-    img_array::Arrays               # Array to render the image into (for observation rendering)
+    reward_range::NTuple{2, Int}
+    #window                          # Window for displaying the environment to humans
+    #img_array::Array               # Array to render the image into (for observation rendering)
     accept_start_angle_deg::Real    # allowed angle in lane for starting position
+    full_transparency::Bool
     user_tile_start                 # Start tile
-    undistort::Bool                 # Used by the UndistortWrapper
+    distortion::Bool
+    randomize_maps_on_reset::Bool
     last_action::Vector{Real}
     wheelVels::Vector{Real}
+    camera_model::Nothing
+    map_names::Union{Vector{String}, Nothing}
+    undistort::Bool
+    step_count::Int
+    timestamp::Real
+    speed::Real
+    horizon_color::Vector
+    ground_color::Vector
+    wheel_dist::Float32
+    cam_height::Float32
+    cam_angle::Vector
+    cam_fov_y::Vector
+    cam_offset::Vector
+    cur_pos::Union{Vector, Nothing}
+    cur_angle::Union{Vector, Nothing}
 end
 
 function Simulator(
         map_name::String=DEFAULT_MAP_NAME,
-        max_steps::UInt=DEFAULT_MAX_STEPS;
+        max_steps::Int=DEFAULT_MAX_STEPS;
         draw_curve::Bool=false,
         draw_bbox::Bool=false,
         domain_rand::Bool=true,
@@ -182,7 +170,7 @@ function Simulator(
         user_tile_start=nothing,
         seed=nothing,
         distortion::Bool=false,
-        randomize_maps_on_reset::Bool=false,
+        randomize_maps_on_reset::Bool=false
 )
     #=
 
@@ -197,29 +185,18 @@ function Simulator(
     :param camera_height:
     :param robot_speed:
     :param accept_start_angle_deg:
-    :param full_transparency:
+    :param full_transparency:   # If true, then we publish all transparency information
     :param user_tile_start: If None, sample randomly. Otherwise (i,j). Overrides map start tile
     :param seed:
     :param distortion: If true, distorts the image with fish-eye approximation
     :param randomize_maps_on_reset: If true, randomizes the map on reset (Slows down training)
     =#
     # first initialize the RNG
-    seed_value = seed
+    rng = MersenneTwister(seed)
 
-    # If true, then we publish all transparency information
-    full_transparency = full_transparency
+    _map = Map(map_name, domain_rand)
 
-    # Map name, set in _load_map()
-    map_name = nothing
-
-    # Full map file path, set in _load_map()
-    map_file_path = nothing
-
-    # The parsed content of the map_file
-    map_data = nothing
-
-    # Flag to enable/disable domain randomization
-    domain_rand = domain_rand
+    randomizer = nothing
     if domain_rand
         randomizer = Randomizer()
     end
@@ -284,44 +261,81 @@ function Simulator(
     self.img_array_human = np.zeros(shape=(WINDOW_HEIGHT, WINDOW_WIDTH, 3), dtype=np.uint8)
     =#
 
-    # Load the map
-    self._load_map(map_name)
+    last_action = [0, 0]
+    wheelVels = [0, 0]
 
     # Distortion params, if so, load the library, only if not bbox mode
-    self.distortion = distortion &&  !draw_bbox
+    distortion = distortion && !draw_bbox
+    camera_model = nothing
     if !draw_bbox && distortion
         if distortion
-            from .distortion import Distortion
-            self.camera_model = Distortion()
+            throw(error("Currently not supporting distortion!"))
+            #include("distortion.jl")
+            #camera_model = Distortion()
         end
+    end
+
+    map_names = nothing
+    if randomize_maps_on_reset
+        map_names = readdir("maps")
+        map_names = [replace(mapfile, ".yaml"=>"") for mapfile in map_names]
     end
 
     # Used by the UndistortWrapper, always initialized to False
     undistort = false
 
-    if self.randomize_maps_on_reset:
-        import os
-        self.map_names = os.listdir('maps')
-        self.map_names = [mapfile.replace('.yaml', '') for mapfile in self.map_names]
+    step_count = 0
+    timestamp = 0f0
+
+    # Robot's current speed
+    speed = 0
+
+    horizon_color = BLUE_SKY_COLOR
+    ground_color = GROUND_COLOR
+
+    # Distance between the robot's wheels
+    wheel_dist = WHEEL_DIST
+
+    # Distance bewteen camera and ground
+    cam_height = CAMERA_FLOOR_DIST
+
+    # Angle at which the camera is rotated
+    cam_angle = [CAMERA_ANGLE, 0, 0]
+
+    # Field of view angle of the camera
+    cam_fov_y = CAMERA_FOV_Y
+
+    # Camera offset for use in free camera mode
+    cam_offset = [0, 0, 0]
+
+    cur_pos = nothing
+    cur_angle = nothing
+    sim = Simulator(rng, _map, max_steps, draw_curve, draw_bbox, domain_rand,
+                    randomizer, frame_rate, frame_skip, delta_time, camera_width,
+                    camera_height, robot_speed, action_space, observation_space,
+                    reward_range, accept_start_angle_deg, full_transparency,
+                    user_tile_start, distortion, randomize_maps_on_reset,
+                    last_action, wheelVels, camera_model, map_names, undistort,
+                    step_count, timestamp, speed, horizon_color, ground_color,
+                    wheel_dist, cam_height, cam_angle, cam_fov_y, cam_offset,
+                    cur_pos, cur_angle)
 
     # Initialize the state
-    self.reset()
+    reset!(sim)
 
-    last_action = [0, 0]
-    wheelVels = [0, 0]
+    return sim
 end
 
-function _init_vlists(sim::Simulator)
-    import pyglet
+function _init_vlists(road_tile_size)
     # Create the vertex list for our road quad
     # Note: the vertices are centered around the origin so we can easily
     # rotate the tiles about their center
-    half_size = sim.road_tile_size / 2
+    half_size = road_tile_size / 2
     verts = [
         -half_size, 0f0, -half_size,
-        half_size, 0f0, -half_size,
-        half_size, 0f0, half_size,
-        -half_size, 0f0, half_size
+         half_size, 0f0, -half_size,
+         half_size, 0f0,  half_size,
+        -half_size, 0f0,  half_size
     ]
     texCoords = [
         1f0, 0f0,
@@ -329,27 +343,31 @@ function _init_vlists(sim::Simulator)
         0f0, 1f0,
         1f0, 1f0
     ]
-    sim.road_vlist = pyglet.graphics.vertex_list(4, ('v3f', verts), ('t2f', texCoords))
+    #TODO
+    #road_vlist = pyglet.graphics.vertex_list(4, ("v3f", verts), ("t2f", texCoords))
 
     # Create the vertex list for the ground quad
     verts = [
-        -1, -0.8f0, 1,
+        -1, -0.8f0,  1,
         -1, -0.8f0, -1,
-        1, -0.8f0, -1,
-        1, -0.8f0, 1
+         1, -0.8f0, -1,
+         1, -0.8f0,  1
     ]
-    sim.ground_vlist = pyglet.graphics.vertex_list(4, ('v3f', verts))
+    #TODO
+    #ground_vlist = pyglet.graphics.vertex_list(4, ("v3f", verts))
+
+    return road_vlist, ground_vlist
 end
 
-function reset(sim::Simulator)
-    #=
-    Reset the simulation at the start of a new episode
-    This also randomizes many environment parameters (domain randomization)
-    =#
+function reset!(sim::Simulator)
+    ##
+    #Reset the simulation at the start of a new episode
+    #This also randomizes many environment parameters (domain randomization)
+    ##
 
     # Step count since episode start
     sim.step_count = 0
-    sim.timestamp = 0.0
+    sim.timestamp = 0f0
 
     # Robot's current speed
     sim.speed = 0
@@ -357,11 +375,12 @@ function reset(sim::Simulator)
 
     if sim.randomize_maps_on_reset
         map_name = rand(sim.map_names)
-        sim._load_map(map_name)
+        sim._map = Map(map_name, sim._map.map_file_path)
     end
 
+    #TODO: Randomizer
     if sim.domain_rand
-        sim.randomization_settings = sim.randomizer.randomize()
+        sim.randomization_settings = randomize(sim.randomizer)
     end
 
     # Horizon color
@@ -370,16 +389,14 @@ function reset(sim::Simulator)
     if sim.domain_rand
         horz_mode = sim.randomization_settings["horz_mode"]
         if horz_mode == 0
-            sim.horizon_color = sim._perturb(BLUE_SKY_COLOR)
+            sim.horizon_color = _perturb(sim, BLUE_SKY_COLOR)
         elseif horz_mode == 1
-            sim.horizon_color = sim._perturb(WALL_COLOR)
+            sim.horizon_color = _perturb(sim, WALL_COLOR)
         elseif horz_mode == 2
-            sim.horizon_color = sim._perturb([0.15, 0.15, 0.15], 0.4)
+            sim.horizon_color = _perturb(sim, [0.15, 0.15, 0.15], 0.4)
         elseif horz_mode == 3
-            sim.horizon_color = sim._perturb([0.9, 0.9, 0.9], 0.4)
+            sim.horizon_color = _perturb(sim, [0.9, 0.9, 0.9], 0.4)
         end
-    else
-        sim.horizon_color = BLUE_SKY_COLOR
     end
 
     # Setup some basic lighting with a far away sun
@@ -389,9 +406,9 @@ function reset(sim::Simulator)
         light_pos = [-40, 200, 100]
     end
 
-    ambient = sim._perturb([0.50, 0.50, 0.50], 0.3)
+    ambient = _perturb(sim, [0.50, 0.50, 0.50], 0.3)
     # XXX: diffuse is not used?
-    diffuse = self._perturb([0.70, 0.70, 0.70], 0.3)
+    diffuse = _perturb(sim, [0.70, 0.70, 0.70], 0.3)
     #=
     from pyglet import gl
     gl.glLightfv(gl.GL_LIGHT0, gl.GL_POSITION, (gl.GLfloat * 4)(*light_pos))
@@ -403,19 +420,19 @@ function reset(sim::Simulator)
     =#
 
     # Ground color
-    sim.ground_color = sim._perturb(GROUND_COLOR, 0.3)
+    sim.ground_color = _perturb(sim, GROUND_COLOR, 0.3)
 
     # Distance between the robot's wheels
-    sim.wheel_dist = sim._perturb(WHEEL_DIST)
+    sim.wheel_dist = _perturb(sim, WHEEL_DIST)
 
     # Distance bewteen camera and ground
-    sim.cam_height = sim._perturb(CAMERA_FLOOR_DIST, 0.08)
+    sim.cam_height = _perturb(sim, CAMERA_FLOOR_DIST, 0.08)
 
     # Angle at which the camera is rotated
-    sim.cam_angle = [sim._perturb(CAMERA_ANGLE, 0.2), 0, 0]
+    sim.cam_angle = vcat(_perturb(sim, CAMERA_ANGLE, 0.2), 0, 0)
 
     # Field of view angle of the camera
-    sim.cam_fov_y = sim._perturb(CAMERA_FOV_Y, 0.2)
+    sim.cam_fov_y = _perturb(sim, CAMERA_FOV_Y, 0.2)
 
     # Camera offset for use in free camera mode
     sim.cam_offset = [0, 0, 0]
@@ -425,10 +442,10 @@ function reset(sim::Simulator)
     numTris = 12
     verts = []
     colors = []
-    for _ in 0 : 3*numTris
-        p = sim.np_random.uniform(low=[-20, -0.6, -20], high=[20, -0.3, 20], size=(3,))
-        c = sim.np_random.uniform(low=0, high=0.9)
-        c = sim._perturb([c, c, c], 0.1)
+    for _ in 0 : 3numTris
+        p = rand.(sim.rng, Uniform.([-20, -0.6, -20], [20, -0.3, 20]))
+        c = rand(sim.rng, Uniform(0, 0.9))
+        c = _perturb(sim, [c, c, c], 0.1)
         verts = vcat(vets, p[1:1], p[2:2], p[3:3])
         colors = vcat(colors, c[1:1], c[2:2], c[3:3])
     end
@@ -438,1332 +455,1114 @@ function reset(sim::Simulator)
     =#
     # Randomize tile parameters
     #TODO: fix all rands
-    for tile in sim.grid
-        rng = sim.np_random if self.domain_rand else None
+    for tile in sim._map._grid
+        rng = sim.domain_rand ? sim.rng : nothing
         # Randomize the tile texture
-        tile["texture"] = Texture.get(tile["kind"], rng=rng)
+        tile["texture"] = Graphics.get(tile["kind"], rng)
 
         # Random tile color multiplier
-        tile['color'] = self._perturb([1, 1, 1], 0.2)
+        tile["color"] = _perturb(sim, [1, 1, 1], 0.2)
     end
 
     # Randomize object parameters
-    for obj in sim.objects
+    for obj in sim._map._grid.objects
         # Randomize the object color
-        obj.color = sim._perturb([1, 1, 1], 0.3)
+        obj.color = _perturb(sim, [1, 1, 1], 0.3)
 
         # Randomize whether the object is visible or not
         if obj.optional && sim.domain_rand
-            obj.visible = sim.np_random.randint(0, 2) == 0
+            obj.visible = rand(sim.rng, 0:1) == 0
         else
-            obj.visible = True
+            obj.visible = true
         end
     end
 
     # If the map specifies a starting tile
-    if self.user_tile_start:
-        logger.info('using user tile start: %s' % self.user_tile_start)
-        i, j = self.user_tile_start
-        tile = self._get_tile(i, j)
-        if tile is None:
-            msg = 'The tile specified does not exist.'
-            raise Exception(msg)
-        logger.debug('tile: %s' % tile)
-    else:
-        if self.start_tile is not None:
-            tile = self.start_tile
-        else:
+    if !isa(sim.user_tile_start, Nothing)
+        #logger.info('using user tile start: %s' % self.user_tile_start)
+        i, j = sim.user_tile_start
+        tile = _get_tile(sim._map._grid, i, j)
+        if isa(tile, Nothing)
+            msg = "The tile specified does not exist."
+            throw(error(msg))
+        end
+        #logger.debug('tile: %s' % tile)
+    else
+        if !isa(sim.start_tile, Nothing)
+            tile = sim.start_tile
+        else
             # Select a random drivable tile to start on
-            tile_idx = self.np_random.randint(0, len(self.drivable_tiles))
-            tile = self.drivable_tiles[tile_idx]
+            tile_idx = rand(sim.rng, 1:length(sim._map._grid.drivable_tiles))
+            tile = sim._map._grid.drivable_tiles[tile_idx]
+        end
+    end
 
     # Keep trying to find a valid spawn position on this tile
 
 
-    for _ in range(MAX_SPAWN_ATTEMPTS):
-        i, j = tile['coords']
+    for iter in 1:MAX_SPAWN_ATTEMPTS
+        i, j = tile["coords"]
 
         # Choose a random position on this tile
-        x = self.np_random.uniform(i, i + 1) * self.road_tile_size
-        z = self.np_random.uniform(j, j + 1) * self.road_tile_size
-        propose_pos = np.array([x, 0, z])
+        x = rand(sim.rng, Uniform(i, i + 1)) * sim._map._grid.road_tile_size
+        z = rand(sim.rng, Uniform(j, j + 1)) * sim._map._grid.road_tile_size
+        propose_pos = [x, 0, z]
 
         # Choose a random direction
-        propose_angle = self.np_random.uniform(0, 2 * math.pi)
+        propose_angle = rand(sim.rng, Uniform(0, 2π))
 
         # logger.debug('Sampled %s %s angle %s' % (propose_pos[0],
         #                                          propose_pos[1],
         #                                          np.rad2deg(propose_angle)))
 
         # If this is too close to an object or not a valid pose, retry
-        inconvenient = self._inconvenient_spawn(propose_pos)
+        inconvenient = _inconvenient_spawn(sim, propose_pos)
 
-        if inconvenient:
-            # msg = 'The spawn was inconvenient.'
-            # logger.warning(msg)
-            continue
+        inconvenient && continue
 
-        invalid = not self._valid_pose(propose_pos, propose_angle, safety_factor=1.3)
-        if invalid:
-            # msg = 'The spawn was invalid.'
-            # logger.warning(msg)
-            continue
+        invalid = !_valid_pose(sim, propose_pos, propose_angle, 1.3)
+        invalid && continue
 
         # If the angle is too far away from the driving direction, retry
-        try:
-            lp = self.get_lane_pos2(propose_pos, propose_angle)
-        except NotInLane:
-            continue
-        M = self.accept_start_angle_deg
+        try
+            lp = get_lane_pos2(sim, propose_pos, propose_angle)
+        catch y
+            isa(y, NotInLane) && continue
+        end
+        M = sim.accept_start_angle_deg
         ok = -M < lp.angle_deg < +M
-        if not ok:
+        if !ok
+            if iter == MAX_SPAWN_ATTEMPTS
+                msg = "Could not find a valid starting pose after $MAX_SPAWN_ATTEMPTS attempts"
+                throw(error(msg))
+            end
             continue
+        end
         # Found a valid initial pose
         break
-    else:
-        msg = 'Could not find a valid starting pose after %s attempts' % MAX_SPAWN_ATTEMPTS
-        raise Exception(msg)
+    end
 
-    self.cur_pos = propose_pos
-    self.cur_angle = propose_angle
+    sim.cur_pos = propose_pos
+    sim.cur_angle = propose_angle
 
-    logger.info('Starting at %s %s' % (self.cur_pos, self.cur_angle))
+    #logger.info('Starting at %s %s' % (sim.cur_pos, sim.cur_angle))
 
     # Generate the first camera image
-    obs = self.render_obs()
+    obs = render_obs(sims)
 end
 
-function _load_map(sim::Simulator, map_name::String)
-    #=
-    Load the map layout from a YAML file
-    =#
+function close(sim::Simulator) end
 
-    # Store the map name
-    sim.map_name = map_name
+function _perturb(sim::Simulator, val, scale=0.1)
+    ##
+    #Add noise to a value. This is used for domain randomization.
+    ##
+    @assert 0 ≤ scale < 1
 
-    # Get the full map file path
-    sim.map_file_path = get_file_path('maps', map_name, 'yaml')
+    !sim.domain_rand && (return val)
 
-    #logger.debug('loading map file "%s"' % self.map_file_path)
+    noise = rand(sim.rng, Uniform(1 - scale, 1 + scale), size(val)...)
 
-    open(sim.map_file_path, 'r') do f
-        sim.map_data = YAML.load(f)
-    end
-    sim._interpret_map(sim.map_data)
+    return val .* noise
 end
 
-function _interpret_map(sim::Simulator, map_data::Dict)
-    if "tile_size" ∉ map_data
-        msg = "Must now include explicit tile_size in the map data."
-        throw(KeyError(msg))
-    end
-    sim.road_tile_size = map_data["tile_size"]
-    _init_vlists(sim)
+function _collidable_object(grid, obj_corners, obj_norm,
+                            possible_tiles, road_tile_size)
+    ##
+    #A function to check if an object intersects with any
+    #drivable tiles, which would mean our agent could run into them.
+    #Helps optimize collision checking with agent during runtime
+    ##
 
-    tiles = map_data["tiles"]
-    @assert length(tiles) > 0
-    @assert length(tiles[1]) > 0
+    size(possible_tiles) == (0,) && (return false)
 
-    # Create the grid
-    sim.grid_height = length(tiles)
-    sim.grid_width = length(tiles[1])
-    sim.grid = [nothing] * sim.grid_width * sim.grid_height
-
-    # We keep a separate list of drivable tiles
-    sim.drivable_tiles = []
-
-    # For each row in the grid
-    for (j, row) ∈ enumerate(tiles)
-        msg = "each row of tiles must have the same length"
-        if length(row) != sim.grid_width
-            raise Exception(msg)
+    drivable_tiles = []
+    for c in possible_tiles
+        tile = _get_tile.(grid, c[1:1], c[2:2])
+        if !isa(tile, Nothing) && tile["drivable"]
+            push!(drivable_tiles, (c[1], c[2]))
         end
-
-        # For each tile in this row
-        for (i, tile) in enumerate(row)
-            tile = strip(tile)
-
-            tile == "empty" && continue
-
-            if '/' ∈ tile
-                kind, orient = split(tile, "/")
-                kind = strip(kind, " ")
-                orient = strip(orient, " ")
-                angle = ['S', 'E', 'N', 'W'].index(orient)
-                drivable = true
-            elseif '4' ∈ tile
-                kind = '4way'
-                angle = 2
-                drivable = True
-            else:
-                kind = tile
-                angle = 0
-                drivable = False
-
-            tile = {
-                'coords': (i, j),
-                'kind': kind,
-                'angle': angle,
-                'drivable': drivable
-            }
-
-            self._set_tile(i, j, tile)
-
-            if drivable:
-                tile['curves'] = self._get_curve(i, j)
-                self.drivable_tiles.append(tile)
-
-    self.mesh = ObjMesh.get('duckiebot')
-    self._load_objects(map_data)
-
-    # Get the starting tile from the map, if specified
-    self.start_tile = None
-    if 'start_tile' in map_data:
-        coords = map_data['start_tile']
-        self.start_tile = self._get_tile(*coords)
-
-def _load_objects(self, map_data):
-    # Create the objects array
-    self.objects = []
-
-    # The corners for every object, regardless if collidable or not
-    self.object_corners = []
-
-    # Arrays for checking collisions with N static objects
-    # (Dynamic objects done separately)
-    # (N x 2): Object position used in calculating reward
-    self.collidable_centers = []
-
-    # (N x 2 x 4): 4 corners - (x, z) - for object's boundbox
-    self.collidable_corners = []
-
-    # (N x 2 x 2): two 2D norms for each object (1 per axis of boundbox)
-    self.collidable_norms = []
-
-    # (N): Safety radius for object used in calculating reward
-    self.collidable_safety_radii = []
-
-    # For each object
-    for obj_idx, desc in enumerate(map_data.get('objects', [])):
-        kind = desc['kind']
-
-        pos = desc['pos']
-        x, z = pos[0:2]
-        y = pos[2] if len(pos) == 3 else 0.0
-
-        rotate = desc['rotate']
-        optional = desc.get('optional', False)
-
-        pos = self.road_tile_size * np.array((x, y, z))
-
-        # Load the mesh
-        mesh = ObjMesh.get(kind)
-
-        if 'height' in desc:
-            scale = desc['height'] / mesh.max_coords[1]
-        else:
-            scale = desc['scale']
-        assert not ('height' in desc and 'scale' in desc), "cannot specify both height and scale"
-
-        static = desc.get('static', True)
-
-        obj_desc = {
-            'kind': kind,
-            'mesh': mesh,
-            'pos': pos,
-            'scale': scale,
-            'y_rot': rotate,
-            'optional': optional,
-            'static': static,
-        }
-
-        # obj = None
-        if static:
-            if kind == "trafficlight":
-                obj = TrafficLightObj(obj_desc, self.domain_rand, SAFETY_RAD_MULT)
-            else:
-                obj = WorldObj(obj_desc, self.domain_rand, SAFETY_RAD_MULT)
-        else:
-            if kind == "duckiebot":
-                obj = DuckiebotObj(obj_desc, self.domain_rand, SAFETY_RAD_MULT, WHEEL_DIST,
-                                   ROBOT_WIDTH, ROBOT_LENGTH)
-            elif kind == "duckie":
-                obj = DuckieObj(obj_desc, self.domain_rand, SAFETY_RAD_MULT, self.road_tile_size)
-            else:
-                msg = 'I do not know what object this is: %s' % kind
-                raise Exception(msg)
-
-        self.objects.append(obj)
-
-        # Compute collision detection information
-
-        # angle = rotate * (math.pi / 180)
-
-        # Find drivable tiles object could intersect with
-        possible_tiles = find_candidate_tiles(obj.obj_corners, self.road_tile_size)
-
-        # If the object intersects with a drivable tile
-        if static and kind != "trafficlight" and self._collidable_object(
-                obj.obj_corners, obj.obj_norm, possible_tiles
-        ):
-            self.collidable_centers.append(pos)
-            self.collidable_corners.append(obj.obj_corners.T)
-            self.collidable_norms.append(obj.obj_norm)
-            self.collidable_safety_radii.append(obj.safety_radius)
-
-    # If there are collidable objects
-    if len(self.collidable_corners) > 0:
-        self.collidable_corners = np.stack(self.collidable_corners, axis=0)
-        self.collidable_norms = np.stack(self.collidable_norms, axis=0)
-
-        # Stack doesn't do anything if there's only one object,
-        # So we add an extra dimension to avoid shape errors later
-        if len(self.collidable_corners.shape) == 2:
-            self.collidable_corners = self.collidable_corners[np.newaxis]
-            self.collidable_norms = self.collidable_norms[np.newaxis]
-
-    self.collidable_centers = np.array(self.collidable_centers)
-    self.collidable_safety_radii = np.array(self.collidable_safety_radii)
-
-    def close(self):
-        pass
-
-    def seed(self, seed=None):
-        self.np_random, _ = seeding.np_random(seed)
-        return [seed]
-
-    def _set_tile(self, i, j, tile):
-        assert i >= 0 and i < self.grid_width
-        assert j >= 0 and j < self.grid_height
-        self.grid[j * self.grid_width + i] = tile
-
-    def _get_tile(self, i, j):
-        """
-            Returns None if the duckiebot is not in a tile.
-        """
-        i = int(i)
-        j = int(j)
-        if i < 0 or i >= self.grid_width:
-            return None
-        if j < 0 or j >= self.grid_height:
-            return None
-        return self.grid[j * self.grid_width + i]
-
-    def _perturb(self, val, scale=0.1):
-        """
-        Add noise to a value. This is used for domain randomization.
-        """
-        assert scale >= 0
-        assert scale < 1
-
-        if isinstance(val, list):
-            val = np.array(val)
-
-        if not self.domain_rand:
-            return val
-
-        if isinstance(val, np.ndarray):
-            noise = self.np_random.uniform(low=1 - scale, high=1 + scale, size=val.shape)
-        else:
-            noise = self.np_random.uniform(low=1 - scale, high=1 + scale)
-
-        return val * noise
-
-    def _collidable_object(self, obj_corners, obj_norm, possible_tiles):
-        """
-        A function to check if an object intersects with any
-        drivable tiles, which would mean our agent could run into them.
-        Helps optimize collision checking with agent during runtime
-        """
-
-        if possible_tiles.shape == 0:
-            return False
-
-        drivable_tiles = []
-        for c in possible_tiles:
-            tile = self._get_tile(c[0], c[1])
-            if tile and tile['drivable']:
-                drivable_tiles.append((c[0], c[1]))
-
-        if not drivable_tiles:
-            return False
-
-        drivable_tiles = np.array(drivable_tiles)
-
-        # Tiles are axis aligned, so add normal vectors in bulk
-        tile_norms = np.array([[1, 0], [0, 1]] * len(drivable_tiles))
-
-        # None of the candidate tiles are drivable, don't add object
-        if len(drivable_tiles) == 0:
-            return False
-
-        # Find the corners for each candidate tile
-        drivable_tiles = np.array([
-            tile_corners(
-                    self._get_tile(pt[0], pt[1])['coords'],
-                    self.road_tile_size
-            ).T for pt in drivable_tiles
-        ])
-
-        # Stack doesn't do anything if there's only one object,
-        # So we add an extra dimension to avoid shape errors later
-        if len(tile_norms.shape) == 2:
-            tile_norms = tile_norms[np.newaxis]
-        else:  # Stack works as expected
-            drivable_tiles = np.stack(drivable_tiles, axis=0)
-            tile_norms = np.stack(tile_norms, axis=0)
-
-        # Only add it if one of the vertices is on a drivable tile
-        return intersects(obj_corners, drivable_tiles, obj_norm, tile_norms)
-
-    def get_grid_coords(self, abs_pos):
-        """
-        Compute the tile indices (i,j) for a given (x,_,z) world position
-
-        x-axis maps to increasing i indices
-        z-axis maps to increasing j indices
-
-        Note: may return coordinates outside of the grid if the
-        position entered is outside of the grid.
-        """
-
-        x, _, z = abs_pos
-        i = math.floor(x / self.road_tile_size)
-        j = math.floor(z / self.road_tile_size)
-
-        return int(i), int(j)
-
-    def _get_curve(self, i, j):
-        """
-            Get the Bezier curve control points for a given tile
-        """
-        tile = self._get_tile(i, j)
-        assert tile is not None
-
-        kind = tile['kind']
-        angle = tile['angle']
-
-        # Each tile will have a unique set of control points,
-        # Corresponding to each of its possible turns
-
-        if kind.startswith('straight'):
-            pts = np.array([
-                [
-                    [-0.20, 0, -0.50],
-                    [-0.20, 0, -0.25],
-                    [-0.20, 0, 0.25],
-                    [-0.20, 0, 0.50],
-                ],
-                [
-                    [0.20, 0, 0.50],
-                    [0.20, 0, 0.25],
-                    [0.20, 0, -0.25],
-                    [0.20, 0, -0.50],
-                ]
-            ]) * self.road_tile_size
-
-        elif kind == 'curve_left':
-            pts = np.array([
-                [
-                    [-0.20, 0, -0.50],
-                    [-0.20, 0, 0.00],
-                    [0.00, 0, 0.20],
-                    [0.50, 0, 0.20],
-                ],
-                [
-                    [0.50, 0, -0.20],
-                    [0.30, 0, -0.20],
-                    [0.20, 0, -0.30],
-                    [0.20, 0, -0.50],
-                ]
-            ]) * self.road_tile_size
-
-        elif kind == 'curve_right':
-            pts = np.array([
-                [
-                    [-0.20, 0, -0.50],
-                    [-0.20, 0, -0.20],
-                    [-0.30, 0, -0.20],
-                    [-0.50, 0, -0.20],
-                ],
-
-                [
-                    [-0.50, 0, 0.20],
-                    [-0.30, 0, 0.20],
-                    [0.30, 0, 0.00],
-                    [0.20, 0, -0.50],
-                ]
-            ]) * self.road_tile_size
-
-        # Hardcoded all curves for 3way intersection
-        elif kind.startswith('3way'):
-            pts = np.array([
-                [
-                    [-0.20, 0, -0.50],
-                    [-0.20, 0, -0.25],
-                    [-0.20, 0, 0.25],
-                    [-0.20, 0, 0.50],
-                ],
-                [
-                    [-0.20, 0, -0.50],
-                    [-0.20, 0, 0.00],
-                    [0.00, 0, 0.20],
-                    [0.50, 0, 0.20],
-                ],
-                [
-                    [0.20, 0, 0.50],
-                    [0.20, 0, 0.25],
-                    [0.20, 0, -0.25],
-                    [0.20, 0, -0.50],
-                ],
-                [
-                    [0.50, 0, -0.20],
-                    [0.30, 0, -0.20],
-                    [0.20, 0, -0.20],
-                    [0.20, 0, -0.50],
-                ],
-                [
-                    [0.20, 0, 0.50],
-                    [0.20, 0, 0.20],
-                    [0.30, 0, 0.20],
-                    [0.50, 0, 0.20],
-                ],
-                [
-                    [0.50, 0, -0.20],
-                    [0.30, 0, -0.20],
-                    [-0.20, 0, 0.00],
-                    [-0.20, 0, 0.50],
-                ],
-            ]) * self.road_tile_size
-
-        # Template for each side of 4way intersection
-        elif kind.startswith('4way'):
-            pts = np.array([
-                [
-                    [-0.20, 0, -0.50],
-                    [-0.20, 0, 0.00],
-                    [0.00, 0, 0.20],
-                    [0.50, 0, 0.20],
-                ],
-                [
-                    [-0.20, 0, -0.50],
-                    [-0.20, 0, -0.25],
-                    [-0.20, 0, 0.25],
-                    [-0.20, 0, 0.50],
-                ],
-                [
-                    [-0.20, 0, -0.50],
-                    [-0.20, 0, -0.20],
-                    [-0.30, 0, -0.20],
-                    [-0.50, 0, -0.20],
-                ]
-            ]) * self.road_tile_size
-        else:
-            assert False, kind
-
-        # Rotate and align each curve with its place in global frame
-        if kind.startswith('4way'):
-            fourway_pts = []
-            # Generate all four sides' curves,
-            # with 3-points template above
-            for rot in np.arange(0, 4):
-                mat = gen_rot_matrix(np.array([0, 1, 0]), rot * math.pi / 2)
-                pts_new = np.matmul(pts, mat)
-                pts_new += np.array([(i + 0.5) * self.road_tile_size, 0, (j + 0.5) * self.road_tile_size])
-                fourway_pts.append(pts_new)
-
-            fourway_pts = np.reshape(np.array(fourway_pts), (12, 4, 3))
-            return fourway_pts
-
-        # Hardcoded each curve; just rotate and shift
-        elif kind.startswith('3way'):
-            threeway_pts = []
-            mat = gen_rot_matrix(np.array([0, 1, 0]), angle * math.pi / 2)
-            pts_new = np.matmul(pts, mat)
-            pts_new += np.array([(i + 0.5) * self.road_tile_size, 0, (j + 0.5) * self.road_tile_size])
-            threeway_pts.append(pts_new)
-
-            threeway_pts = np.array(threeway_pts)
-            threeway_pts = np.reshape(threeway_pts, (6, 4, 3))
-            return threeway_pts
-
-        else:
-            mat = gen_rot_matrix(np.array([0, 1, 0]), angle * math.pi / 2)
-            pts = np.matmul(pts, mat)
-            pts += np.array([(i + 0.5) * self.road_tile_size, 0, (j + 0.5) * self.road_tile_size])
-
-        return pts
-
-    def get_dir_vec(self, angle=None):
-        """
-        Vector pointing in the direction the agent is looking
-        """
-        if angle == None:
-            angle = self.cur_angle
-
-        x = math.cos(angle)
-        z = -math.sin(angle)
-        return np.array([x, 0, z])
-
-    def get_right_vec(self, angle=None):
-        """
-        Vector pointing to the right of the agent
-        """
-        if angle == None:
-            angle = self.cur_angle
-
-        x = math.sin(angle)
-        z = math.cos(angle)
-        return np.array([x, 0, z])
-
-    def closest_curve_point(self, pos, angle=None):
-        """
-            Get the closest point on the curve to a given point
-            Also returns the tangent at that point.
-
-            Returns None, None if not in a lane.
-        """
-
-        i, j = self.get_grid_coords(pos)
-        tile = self._get_tile(i, j)
-
-        if tile is None or not tile['drivable']:
-            return None, None
-
-        # Find curve with largest dotproduct with heading
-        curves = self._get_tile(i, j)['curves']
-        curve_headings = curves[:, -1, :] - curves[:, 0, :]
-        curve_headings = curve_headings / np.linalg.norm(curve_headings).reshape(1, -1)
-        dir_vec = get_dir_vec(angle)
-
-        dot_prods = np.dot(curve_headings, dir_vec)
-
-        # Closest curve = one with largest dotprod
-        cps = curves[np.argmax(dot_prods)]
-
-        # Find closest point and tangent to this curve
-        t = bezier_closest(cps, pos)
-        point = bezier_point(cps, t)
-        tangent = bezier_tangent(cps, t)
-
-        return point, tangent
-
-    def get_lane_pos2(self, pos, angle):
-        """
-        Get the position of the agent relative to the center of the right lane
-
-        Raises NotInLane if the Duckiebot is not in a lane.
-        """
-
-        # Get the closest point along the right lane's Bezier curve,
-        # and the tangent at that point
-        point, tangent = self.closest_curve_point(pos, angle)
-        if point is None:
-            msg = 'Point not in lane: %s' % pos
-            raise NotInLane(msg)
-
-        assert point is not None
-
-        # Compute the alignment of the agent direction with the curve tangent
-        dirVec = get_dir_vec(angle)
-        dotDir = np.dot(dirVec, tangent)
-        dotDir = max(-1, min(1, dotDir))
-
-        # Compute the signed distance to the curve
-        # Right of the curve is negative, left is positive
-        posVec = pos - point
-        upVec = np.array([0, 1, 0])
-        rightVec = np.cross(tangent, upVec)
-        signedDist = np.dot(posVec, rightVec)
-
-        # Compute the signed angle between the direction and curve tangent
-        # Right of the tangent is negative, left is positive
-        angle_rad = math.acos(dotDir)
-
-        if np.dot(dirVec, rightVec) < 0:
-            angle_rad *= -1
-
-        angle_deg = np.rad2deg(angle_rad)
-        # return signedDist, dotDir, angle_deg
-
-        return LanePosition(dist=signedDist, dot_dir=dotDir, angle_deg=angle_deg,
-                            angle_rad=angle_rad)
-
-    def _drivable_pos(self, pos):
-        """
-        Check that the given (x,y,z) position is on a drivable tile
-        """
-
-        coords = self.get_grid_coords(pos)
-        tile = self._get_tile(*coords)
-        if tile is None:
-            msg = f'No tile found at {pos} {coords}'
-            logger.debug(msg)
-            return False
-
-        if not tile['drivable']:
-            msg = f'{pos} corresponds to tile at {coords} which is not drivable: {tile}'
-            logger.debug(msg)
-            return False
-
-        return True
-
-    def _proximity_penalty2(self, pos, angle):
-        """
-        Calculates a 'safe driving penalty' (used as negative rew.)
-        as described in Issue #24
-
-        Describes the amount of overlap between the "safety circles" (circles
-        that extend further out than BBoxes, giving an earlier collision 'signal'
-        The number is max(0, prox.penalty), where a lower (more negative) penalty
-        means that more of the circles are overlapping
-        """
-
-        pos = _actual_center(pos, angle)
-        if len(self.collidable_centers) == 0:
+    end
+    isempty(drivable_tiles) && (return false)
+
+
+    # Tiles are axis aligned, so add normal vectors in bulk
+    tile_norms = repeat([1 0; 0 1],  length(drivable_tiles))
+
+    # None of the candidate tiles are drivable, don't add object
+    isempty(drivable_tiles) && (return false)
+
+    # Find the corners for each candidate tile
+    drivable_tiles = [permutedims(
+        tile_corners(
+                _get_tile(grid, pt[1:1], pt[2:2])["coords"],
+                road_tile_size
+        )) for pt in drivable_tiles
+    ]
+
+    # Stack doesn't do anything if there's only one object,
+    # So we add an extra dimension to avoid shape errors later
+    if length(tile_norms.shape) == 2
+        tile_norms = add_axis(tile_norms)
+    else  # Stack works as expected
+        drivable_tiles = vcat(drivable_tiles...)
+        tile_norms = vcat(tile_norms...)
+    end
+
+    # Only add it if one of the vertices is on a drivable tile
+    return intersects(obj_corners, drivable_tiles, obj_norm, tile_norms)
+end
+
+function get_grid_coords(road_tile_size, abs_pos)
+    ##
+    #Compute the tile indices (i,j) for a given (x,_,z) world position
+    #
+    #x-axis maps to increasing i indices
+    #z-axis maps to increasing j indices
+    #
+    #Note: may return coordinates outside of the grid if the
+    #position entered is outside of the grid.
+    ##
+
+    x, _, z = abs_pos
+    i = floor(x / road_tile_size)
+    j = floor(z / road_tile_size)
+
+    return Int(i), Int(j)
+end
+
+function _get_curve(grid, i, j, road_tile_size)
+    ##
+    #    Get the Bezier curve control points for a given tile
+    #
+    tile = _get_tile(grid, i, j)
+    @assert !isa(tile, Nothing)
+
+    kind = tile["kind"]
+    angle = tile["angle"]
+
+    # Each tile will have a unique set of control points,
+    # Corresponding to each of its possible turns
+
+    if startswith(kind, "straight")
+        pts = cat(
+                [-0.20 0 -0.50;
+                 -0.20 0 -0.25;
+                 -0.20 0  0.25;
+                 -0.20 0  0.50],
+
+                [0.20 0  0.50;
+                 0.20 0  0.25;
+                 0.20 0 -0.25;
+                 0.20 0 -0.50],
+            dims=3) .* road_tile_size
+
+    elseif kind == "curve_left"
+        pts = cat(
+                [-0.20 0 -0.50;
+                 -0.20 0  0.00;
+                  0.00 0  0.20;
+                  0.50 0  0.20],
+
+                [0.50 0 -0.20;
+                 0.30 0 -0.20;
+                 0.20 0 -0.30;
+                 0.20 0 -0.50],
+            dims=3) .* road_tile_size
+
+    elseif kind == "curve_right"
+        pts = cat(
+                [-0.20 0 -0.50;
+                 -0.20 0 -0.20;
+                 -0.30 0 -0.20;
+                 -0.50 0 -0.20],
+
+                [-0.50 0  0.20;
+                 -0.30 0  0.20;
+                  0.30 0  0.00;
+                  0.20 0 -0.50],
+            dims=3) .* road_tile_size
+
+    # Hardcoded all curves for 3way intersection
+    elseif startswith(kind, "3way")
+        pts = cat(
+                [-0.20 0 -0.50;
+                 -0.20 0 -0.25;
+                 -0.20 0  0.25;
+                 -0.20 0  0.50],
+
+                [-0.20 0 -0.50;
+                 -0.20 0  0.00;
+                  0.00 0  0.20;
+                  0.50 0  0.20],
+
+                [0.20 0  0.50;
+                 0.20 0  0.25;
+                 0.20 0 -0.25;
+                 0.20 0 -0.50],
+
+                [0.50 0 -0.20;
+                 0.30 0 -0.20;
+                 0.20 0 -0.20;
+                 0.20 0 -0.50],
+
+                [0.20 0 0.50;
+                 0.20 0 0.20;
+                 0.30 0 0.20;
+                 0.50 0 0.20],
+
+                [ 0.50 0 -0.20;
+                  0.30 0 -0.20;
+                 -0.20 0  0.00;
+                 -0.20 0  0.50],
+            dims=3) .* road_tile_size
+
+    # Template for each side of 4way intersection
+    elseif startswith(kind, "4way")
+        pts = cat(
+                [-0.20 0 -0.50;
+                 -0.20 0  0.00;
+                  0.00 0  0.20;
+                  0.50 0  0.20],
+
+                [-0.20 0 -0.50;
+                 -0.20 0 -0.25;
+                 -0.20 0  0.25;
+                 -0.20 0  0.50],
+
+                [-0.20 0 -0.50;
+                 -0.20 0 -0.20;
+                 -0.30 0 -0.20;
+                 -0.50 0 -0.20],
+            dims=3) .* road_tile_size
+    else
+        @assert false kind
+    end
+
+    # Rotate and align each curve with its place in global frame
+    if startswith(kind, "4way")
+        fourway_pts = []
+        # Generate all four sides' curves,
+        # with 3-points template above
+        for rot in 1:4
+            mat = gen_rot_matrix([0, 1, 0], rot * π / 2)
+            pts_new = pts .* mat
+            pts_new = pts_new .+ [(i + 0.5) .* road_tile_size, 0, (j + 0.5) .* road_tile_size]
+            push!(fourway_pts, pts_new)
+        end
+        fourway_pts = reshape(fourway_pts, 12, 4, 3)
+        return fourway_pts
+
+    # Hardcoded each curve; just rotate and shift
+    elseif startswith(kind, "3way")
+        threeway_pts = []
+        mat = gen_rot_matrix([0, 1, 0], angle * π / 2)
+        #NOTE: pts is 3D matrix, find a work around if * does not work
+        pts_new = pts * mat
+        pts_new = pts_new .+ [(i + 0.5) * road_tile_size, 0, (j + 0.5) * road_tile_size]
+        push!(threeway_pts, pts_new)
+
+        threeway_pts = reshape(threeway_pts, 6, 4, 3)
+        return threeway_pts
+
+    else
+        mat = gen_rot_matrix([0, 1, 0], angle * π / 2)
+        pts = pts * mat
+        pts = pts .+ [(i + 0.5) * road_tile_size, 0, (j + 0.5) * road_tile_size]
+    end
+
+    return pts
+end
+
+get_dir_vec(sim::Simulator) = get_dir_vec(sim.cur_angle)
+get_dir_vec(sim::Simulator, ::Nothing) = get_dir_vec(sim.cur_angle)
+
+function get_dir_vec(angle)
+    ##
+    #Vector pointing in the direction the agent is looking
+    ##
+    x = cos(angle)
+    z = -sin(angle)
+    return vcat(x, 0, z)
+end
+
+get_right_vec(sim::Simulator) = get_right_vec(sim.cur_angle)
+get_right_vec(sim::Simulator, ::Nothing) = get_right_vec(sim.cur_angle)
+
+function get_right_vec(angle)
+    ##
+    #Vector pointing to the right of the agent
+    ##
+
+    x = sin(angle)
+    z = cos(angle)
+    return vcat(x, 0, z)
+end
+
+function closest_curve_point(sim::Simulator, pos, angle=Nothing)
+    ##
+    #    Get the closest point on the curve to a given point
+    #    Also returns the tangent at that point.
+    #
+    #    Returns nothing, nothing if not in a lane.
+    ##
+
+    i, j = get_grid_coords(sim, pos)
+    tile = _get_tile(sim, i, j)
+
+    if isa(tile, Nothing) || !tile["drivable"]
+        return nothing, nothing
+    end
+
+    # Find curve with largest dotproduct with heading
+    curves = _get_tile(sim, i, j)["curves"]
+    curve_headings = curves[:, end, :] .- curves[:, 1, :]
+    curve_headings = curve_headings ./ reshape(norm(curve_headings), 1, :)
+    dir_vec = get_dir_vec(angle)
+
+    dot_prods = dot(curve_headings, dir_vec)
+
+    # Closest curve = one with largest dotprod
+    cps = curves[np.argmax(dot_prods)]
+
+    # Find closest point and tangent to this curve
+    t = bezier_closest(cps, pos)
+    point = bezier_point(cps, t)
+    tangent = bezier_tangent(cps, t)
+
+    return point, tangent
+end
+
+function get_lane_pos2(sim::Simulator, pos, angle)
+    ##
+    #Get the position of the agent relative to the center of the right lane
+    #
+    #Raises NotInLane if the Duckiebot is not in a lane.
+    ##
+
+    # Get the closest point along the right lane's Bezier curve,
+    # and the tangent at that point
+    point, tangent = closest_curve_point(sim, pos, angle)
+    if isa(point, Nothing)
+        msg = "Point not in lane: $pos"
+        throw(NotInLane(msg))
+    end
+
+    @assert !isa(point, Nothing)
+
+    # Compute the alignment of the agent direction with the curve tangent
+    dirVec = get_dir_vec(angle)
+    dotDir = dot(dirVec, tangent)
+    dotDir = max(-1, min(1, dotDir))
+
+    # Compute the signed distance to the curve
+    # Right of the curve is negative, left is positive
+    posVec = pos .- point
+    upVec = [0, 1, 0]
+    rightVec = cross(tangent, upVec)
+    signedDist = dot(posVec, rightVec)
+
+    # Compute the signed angle between the direction and curve tangent
+    # Right of the tangent is negative, left is positive
+    angle_rad = acos(dotDir)
+
+    if dot(dirVec, rightVec) < 0
+        angle_rad *= -1
+    end
+
+    angle_deg = rad2deg(angle_rad)
+    # return signedDist, dotDir, angle_deg
+
+    return LanePosition(signedDist, dotDir, angle_deg, angle_rad)
+end
+
+function _drivable_pos(sim::Simulator, pos)
+    ##
+    #Check that the given (x,y,z) position is on a drivable tile
+    ##
+
+    coords = get_grid_coords(sim, pos)
+    tile = _get_tile(sim, coords...)
+    if isa(tile, Nothing)
+        msg = "No tile found at $pos $coords"
+        #logger.debug(msg)
+        return false
+    end
+
+    if !tile["drivable"]
+        msg = "$pos corresponds to tile at $coords which is not drivable: $tile"
+        #logger.debug(msg)
+        return false
+    end
+
+    return true
+end
+
+function _proximity_penalty2(sim::Simulator, pos, angle)
+    ##
+    #Calculates a 'safe driving penalty' (used as negative rew.)
+    #as described in Issue #24 of gym-duckietown
+    #
+    #Describes the amount of overlap between the "safety circles" (circles
+    #that extend further out than BBoxes, giving an earlier collision 'signal'
+    #The number is max(0, prox.penalty), where a lower (more negative) penalty
+    #means that more of the circles are overlapping
+    ##
+
+    pos = _actual_center(pos, angle)
+    if length(self.collidable_centers) == 0
+        static_dist = 0
+    # Find safety penalty w.r.t static obstacles
+    else
+        d = norm(sim.collidable_centers .- pos, dims=2)
+
+        if !safety_circle_intersection(d, AGENT_SAFETY_RAD, sim.collidable_safety_radii)
             static_dist = 0
+        else
+            static_dist = safety_circle_overlap(d, AGENT_SAFETY_RAD, self.collidable_safety_radii)
+        end
+    end
+    total_safety_pen = static_dist
+    for obj in sim._map._grid.objects
+        # Find safety penalty w.r.t dynamic obstacles
+        total_safety_pen = total_safety_pen + proximity(obj, pos, AGENT_SAFETY_RAD)
+    end
+    return total_safety_pen
+end
 
-        # Find safety penalty w.r.t static obstacles
-        else:
-            d = np.linalg.norm(self.collidable_centers - pos, axis=1)
+function _inconvenient_spawn(sim::Simulator, pos)
+    ##
+    #Check that agent spawn is not too close to any object
+    ##
 
-            if not safety_circle_intersection(d, AGENT_SAFETY_RAD, self.collidable_safety_radii):
-                static_dist = 0
-            else:
-                static_dist = safety_circle_overlap(d, AGENT_SAFETY_RAD, self.collidable_safety_radii)
+    results = [norm(x.pos .- pos) <
+               max(x.max_coords) * 0.5 * x.scale + MIN_SPAWN_OBJ_DIST
+               for x in sim._map._grid.objects if x.visible
+               ]
+    return any(results)
+end
 
-        total_safety_pen = static_dist
-        for obj in self.objects:
-            # Find safety penalty w.r.t dynamic obstacles
-            total_safety_pen += obj.proximity(pos, AGENT_SAFETY_RAD)
+function _collision(sim::Simulator, agent_corners)
+    ##
+    #Tensor-based OBB Collision detection
+    ##
 
-        return total_safety_pen
+    # If there are no objects to collide against, stop
+    length(sim.collidable_corners) == 0 && (return false)
 
-    def _inconvenient_spawn(self, pos):
-        """
-        Check that agent spawn is not too close to any object
-        """
+    # Generate the norms corresponding to each face of BB
+    agent_norm = generate_norm(agent_corners)
 
-        results = [np.linalg.norm(x.pos - pos) <
-                   max(x.max_coords) * 0.5 * x.scale + MIN_SPAWN_OBJ_DIST
-                   for x in self.objects if x.visible
-                   ]
-        return np.any(results)
+    # Check collisions with static objects
+    collision = intersects(
+            agent_corners,
+            sim.collidable_corners,
+            agent_norm,
+            sim.collidable_norms
+    )
 
-    def _collision(self, agent_corners):
-        """
-        Tensor-based OBB Collision detection
-        """
+    collision && (return true)
 
-        # If there are no objects to collide against, stop
-        if len(self.collidable_corners) == 0:
-            return False
+    # Check collisions with Dynamic Objects
+    for obj in sim._map._grid.objects
+        check_collision(obj, agent_corners, agent_norm) && (return true)
+    end
 
-        # Generate the norms corresponding to each face of BB
-        agent_norm = generate_norm(agent_corners)
+    # No collision with any object
+    return false
+end
 
-        # Check collisions with static objects
-        collision = intersects(
-                agent_corners,
-                self.collidable_corners,
-                agent_norm,
-                self.collidable_norms
-        )
+function _valid_pose(sim::Simulator, pos, angle, safety_factor=1.0)
+    ##
+    #    Check that the agent is in a valid pose
+    #
+    #    safety_factor = minimum distance
+    ##
 
-        if collision:
-            return True
+    # Compute the coordinates of the base of both wheels
+    pos = _actual_center(pos, angle)
+    f_vec = get_dir_vec(angle)
+    r_vec = get_right_vec(angle)
 
-        # Check collisions with Dynamic Objects
-        for obj in self.objects:
-            if obj.check_collision(agent_corners, agent_norm):
-                return True
+    l_pos = pos .- (safety_factor * 0.5 * ROBOT_WIDTH) * r_vec
+    r_pos = pos .+ (safety_factor * 0.5 * ROBOT_WIDTH) * r_vec
+    f_pos = pos .+ (safety_factor * 0.5 * ROBOT_LENGTH) * f_vec
 
-        # No collision with any object
-        return False
+    # Check that the center position and
+    # both wheels are on drivable tiles and no collisions
 
-    def _valid_pose(self, pos, angle, safety_factor=1.0):
-        """
-            Check that the agent is in a valid pose
-
-            safety_factor = minimum distance
-        """
-
-        # Compute the coordinates of the base of both wheels
-        pos = _actual_center(pos, angle)
-        f_vec = get_dir_vec(angle)
-        r_vec = get_right_vec(angle)
-
-        l_pos = pos - (safety_factor * 0.5 * ROBOT_WIDTH) * r_vec
-        r_pos = pos + (safety_factor * 0.5 * ROBOT_WIDTH) * r_vec
-        f_pos = pos + (safety_factor * 0.5 * ROBOT_LENGTH) * f_vec
-
-        # Check that the center position and
-        # both wheels are on drivable tiles and no collisions
-
-        all_drivable = (self._drivable_pos(pos) and
-                        self._drivable_pos(l_pos) and
-                        self._drivable_pos(r_pos) and
-                        self._drivable_pos(f_pos))
+    all_drivable = (_drivable_pos(sim, pos) &&
+                    _drivable_pos(sim, l_pos) &&
+                    _drivable_pos(sim, r_pos) &&
+                    _drivable_pos(sim, f_pos))
 
 
-        # Recompute the bounding boxes (BB) for the agent
-        agent_corners = get_agent_corners(pos, angle)
-        no_collision = not self._collision(agent_corners)
+    # Recompute the bounding boxes (BB) for the agent
+    agent_corners = get_agent_corners(pos, angle)
+    no_collision = !_collision(sim, agent_corners)
 
-        res = (no_collision and all_drivable)
+    res = (no_collision && all_drivable)
 
-        if not res:
-            logger.debug(f'Invalid pose. Collision free: {no_collision} On drivable area: {all_drivable}')
-            logger.debug(f'safety_factor: {safety_factor}')
-            logger.debug(f'pos: {pos}')
-            logger.debug(f'l_pos: {l_pos}')
-            logger.debug(f'r_pos: {r_pos}')
-            logger.debug(f'f_pos: {f_pos}')
+    if !res
+        #logger.debug(f'Invalid pose. Collision free: {no_collision} On drivable area: {all_drivable}')
+        #logger.debug(f'safety_factor: {safety_factor}')
+        #logger.debug(f'pos: {pos}')
+        #logger.debug(f'l_pos: {l_pos}')
+        #logger.debug(f'r_pos: {r_pos}')
+        #logger.debug(f'f_pos: {f_pos}')
+    end
 
-        return res
+    return res
+end
 
-    def update_physics(self, action, delta_time=None):
-        if delta_time is None:
-            delta_time = self.delta_time
-        self.wheelVels = action * self.robot_speed * 1
-        prev_pos = self.cur_pos
+update_physics(sim::Simulator, action) = update_physics(sim, action, sim.delta_time)
+update_physics(sim::Simulator, action, ::Nothing) = update_physics(sim, action, sim.delta_time)
 
-        # Update the robot's position
-        self.cur_pos, self.cur_angle = _update_pos(self.cur_pos,
-                                                   self.cur_angle,
-                                                   self.wheel_dist,
-                                                   wheelVels=self.wheelVels,
-                                                   deltaTime=delta_time)
-        self.step_count += 1
-        self.timestamp += delta_time
+function update_physics(sim::Simulator, action, delta_time)
+    sim.wheelVels = action * sim.robot_speed * 1
+    prev_pos = sim.cur_pos
 
-        self.last_action = action
+    # Update the robot's position
+    sim.cur_pos, sim.cur_angle = _update_pos(sim.cur_pos,
+                                             sim.cur_angle,
+                                             sim.wheel_dist,
+                                             sim.wheelVels,
+                                             delta_time)
+    sim.step_count += 1
+    sim.timestamp += delta_time
 
-        # Compute the robot's speed
-        delta_pos = self.cur_pos - prev_pos
-        self.speed = np.linalg.norm(delta_pos) / delta_time
+    sim.last_action = action
 
-        # Update world objects
-        for obj in self.objects:
-            if not obj.static and obj.kind == "duckiebot":
-                obj_i, obj_j = self.get_grid_coords(obj.pos)
-                same_tile_obj = [
-                    o for o in self.objects if
-                    tuple(self.get_grid_coords(o.pos)) == (obj_i, obj_j) and o != obj
-                ]
+    # Compute the robot's speed
+    delta_pos = sim.cur_pos .- prev_pos
+    self.speed = norm(delta_pos) / delta_time
 
-                obj.step(delta_time, self.closest_curve_point, same_tile_obj)
-            else:
-                obj.step(delta_time)
+    # Update world objects
+    for obj in self.objects
+        if !obj.static && obj.kind == "duckiebot"
+            obj_i, obj_j = get_grid_coords(sim, obj.pos)
+            same_tile_obj = [
+                o for o in sim._map._grid.objects if
+                tuple(get_grid_coords(sim, o.pos)...,) == (obj_i, obj_j) && o != obj
+            ]
 
-    def get_agent_info(self):
-        info = {}
-        pos = self.cur_pos
-        angle = self.cur_angle
-        # Get the position relative to the right lane tangent
+            step!(sim, delta_time, sim.closest_curve_point, same_tile_obj)
+        else
+            step!(sim, delta_time)
+        end
+    end
+end
 
-        info['action'] = list(self.last_action)
-        if self.full_transparency:
-            #             info['desc'] = """
-            #
-            # cur_pos, cur_angle ::  simulator frame (non cartesian)
-            #
-            # egovehicle_pose_cartesian :: cartesian frame
-            #
-            #     the map goes from (0,0) to (grid_height, grid_width)*self.road_tile_size
-            #
-            # """
-            try:
-                lp = self.get_lane_pos2(pos, angle)
-                info['lane_position'] = lp.as_json_dict()
-            except NotInLane:
-                pass
+function get_agent_info(sim::Simulator)
+    info = Dict()
+    pos = sim.cur_pos
+    angle = sim.cur_angle
+    # Get the position relative to the right lane tangent
 
-            info['robot_speed'] = self.speed
-            info['proximity_penalty'] = self._proximity_penalty2(pos, angle)
-            info['cur_pos'] = [float(pos[0]), float(pos[1]), float(pos[2])]
-            info['cur_angle'] = float(angle)
-            info['wheel_velocities'] = [self.wheelVels[0], self.wheelVels[1]]
+    info["action"] = vcat(sim.last_action)
+    if sim.full_transparency
+        #             info['desc'] = """
+        #
+        # cur_pos, cur_angle ::  simulator frame (non cartesian)
+        #
+        # egovehicle_pose_cartesian :: cartesian frame
+        #
+        #     the map goes from (0,0) to (grid_height, grid_width)*sim.road_tile_size
+        #
+        # """
+        try
+            lp = get_lane_pos2(sim, pos, angle)
+            info["lane_position"] = as_json_dict(lp)
+        catch y end
 
-            # put in cartesian coordinates
-            # (0,0 is bottom left)
-            # q = self.cartesian_from_weird(self.cur_pos, self.)
-            # info['cur_pos_cartesian'] = [float(p[0]), float(p[1])]
-            # info['egovehicle_pose_cartesian'] = {'~SE2Transform': {'p': [float(p[0]), float(p[1])],
-            #                                                        'theta': angle}}
+        info["robot_speed"] = sim.speed
+        info["proximity_penalty"] = _proximity_penalty2(sim, pos, angle)
+        info["cur_pos"] = float.(pos)
+        info["cur_angle"] = float(angle)
+        info["wheel_velocities"] = [sim.wheelVels[1], self.wheelVels[2]]
 
-            info['timestamp'] = self.timestamp
-            info['tile_coords'] = list(self.get_grid_coords(pos))
-            # info['map_data'] = self.map_data
-        misc = {}
-        misc['Simulator'] = info
-        return misc
+        # put in cartesian coordinates
+        # (0,0 is bottom left)
+        # q = self.cartesian_from_weird(self.cur_pos, self.)
+        # info['cur_pos_cartesian'] = [float(p[0]), float(p[1])]
+        # info['egovehicle_pose_cartesian'] = {'~SE2Transform': {'p': [float(p[0]), float(p[1])],
+        #                                                        'theta': angle}}
 
-    def cartesian_from_weird(self, pos, angle) -> np.ndarray:
-        gx, gy, gz = pos
-        grid_height = self.grid_height
-        tile_size = self.road_tile_size
+        info["timestamp"] = sim.timestamp
+        info["tile_coords"] = [get_grid_coords(sim, pos)]
+        # info['map_data'] = self.map_data
+    end
+    misc = Dict()
+    misc["Simulator"] = info
+    return misc
+end
 
-        # this was before but obviously doesn't work for grid_height = 1
-        # cp = [gx, (grid_height - 1) * tile_size - gz]
-        cp = [gx, grid_height * tile_size - gz]
+#=
+function cartesian_from_weird(sim::Simulator, pos, angle)
+    gx, gy, gz = pos
+    grid_height = self.grid_height
+    tile_size = sim.road_tile_size
 
+    # this was before but obviously doesn't work for grid_height = 1
+    # cp = [gx, (grid_height - 1) * tile_size - gz]
+    cp = [gx, grid_height * tile_size - gz]
 
-        return geometry.SE2_from_translation_angle(cp, angle)
+    #TODO
+    return geometry.SE2_from_translation_angle(cp, angle)
+end
 
-    def weird_from_cartesian(self, q: np.ndarray) -> Tuple[list, float]:
+function weird_from_cartesian(self, q: np.ndarray)
+    #TODO
+    cp, angle = geometry.translation_angle_from_SE2(q)
 
-        cp, angle = geometry.translation_angle_from_SE2(q)
+    gx = cp[1]
+    gy = 0
+    # cp[1] = (grid_height - 1) * tile_size - gz
+    grid_height = sim.grid_height
+    tile_size = sim.road_tile_size
+    # this was before but obviously doesn't work for grid_height = 1
+    # gz = (grid_height - 1) * tile_size - cp[1]
+    gz = grid_height * tile_size - cp[2]
+    return [gx, gy, gz], angle
+end
+=#
+function compute_reward(sim::Simulator, pos, angle, speed)
+    # Compute the collision avoidance penalty
+    col_penalty = _proximity_penalty2(sim, pos, angle)
 
-        gx = cp[0]
-        gy = 0
-        # cp[1] = (grid_height - 1) * tile_size - gz
-        grid_height = self.grid_height
-        tile_size = self.road_tile_size
-        # this was before but obviously doesn't work for grid_height = 1
-        # gz = (grid_height - 1) * tile_size - cp[1]
-        gz = grid_height * tile_size - cp[1]
-        return [gx, gy, gz], angle
-
-    def compute_reward(self, pos, angle, speed):
-        # Compute the collision avoidance penalty
-        col_penalty = self._proximity_penalty2(pos, angle)
-
-        # Get the position relative to the right lane tangent
-        try:
-            lp = self.get_lane_pos2(pos, angle)
-        except NotInLane:
+    # Get the position relative to the right lane tangent
+    try
+        lp = get_lane_pos2(sim, pos, angle)
+    catch y
+        if isa(y, NotInLane)
             reward = 40 * col_penalty
-        else:
-
+        else
             # Compute the reward
             reward = (
                     +1.0 * speed * lp.dot_dir +
-                    -10 * np.abs(lp.dist) +
+                    -10 * abs(lp.dist) +
                     +40 * col_penalty
             )
-        return reward
+        end
+    end
+    return reward
+end
 
-    def step(self, action: np.ndarray):
-        action = np.clip(action, -1, 1)
-        # Actions could be a Python list
-        action = np.array(action)
-        for _ in range(self.frame_skip):
-            self.update_physics(action)
+function step!(sim::Simulator, action)
+    action = clamp(action, -1, 1)
+    # Actions could be a Python list
 
-        # Generate the current camera image
-        obs = self.render_obs()
-        misc = self.get_agent_info()
+    for _ in 1:sim.frame_skip
+        update_physics(sim, action)
+    end
 
-        d = self._compute_done_reward()
-        misc['Simulator']['msg'] = d.done_why
+    # Generate the current camera image
+    obs = render_obs(sim)
+    misc = get_agent_info(sim)
 
-        return obs, d.reward, d.done, misc
+    d = _compute_done_reward(sim)
+    misc["Simulator"]["msg"] = d.done_why
+    return obs, d.reward, d.done, misc
+end
 
-    def _compute_done_reward(self) -> DoneRewardInfo:
-        # If the agent is not in a valid pose (on drivable tiles)
-        if not self._valid_pose(self.cur_pos, self.cur_angle):
-            msg = 'Stopping the simulator because we are at an invalid pose.'
-            logger.info(msg)
-            reward = REWARD_INVALID_POSE
-            done_code = 'invalid-pose'
-            done = True
-        # If the maximum time step count is reached
-        elif self.step_count >= self.max_steps:
-            msg = 'Stopping the simulator because we reached max_steps = %s' % self.max_steps
-            logger.info(msg)
-            done = True
-            reward = 0
-            done_code = 'max-steps-reached'
-        else:
-            done = False
-            reward = self.compute_reward(self.cur_pos, self.cur_angle, self.robot_speed)
-            msg = ''
-            done_code = 'in-progress'
-        return DoneRewardInfo(done=done, done_why=msg, reward=reward, done_code=done_code)
+function _compute_done_reward(sim::Simulator)
+    # If the agent is not in a valid pose (on drivable tiles)
+    if !_valid_pose(sim, sim.cur_pos, sim.cur_angle)
+        msg = "Stopping the simulator because we are at an invalid pose."
+        #logger.info(msg)
+        reward = REWARD_INVALID_POSE
+        done_code = "invalid-pose"
+        done = true
+    # If the maximum time step count is reached
+    elseif sim.step_count ≥ sim.max_steps
+        msg = "Stopping the simulator because we reached max_steps = $(sim.max_steps)"
+        #logger.info(msg)
+        done = true
+        reward = 0
+        done_code = "max-steps-reached"
+    else
+        done = false
+        reward = compute_reward(sim, sim.cur_pos, sim.cur_angle, sim.robot_speed)
+        msg = ""
+        done_code = "in-progress"
+    end
+    return DoneRewardInfo(done, msg, reward, done_code)
+end
 
-    def _render_img(self, width, height, multi_fbo, final_fbo, img_array, top_down=True):
-        """
-        Render an image of the environment into a frame buffer
-        Produce a numpy RGB array image as output
-        """
+#=
+def _render_img(self, width, height, multi_fbo, final_fbo, img_array, top_down=True):
+    """
+    Render an image of the environment into a frame buffer
+    Produce a numpy RGB array image as output
+    """
 
-        if not self.graphics:
-            return
+    if not self.graphics:
+        return
 
-        # Switch to the default context
-        # This is necessary on Linux nvidia drivers
-        # pyglet.gl._shadow_window.switch_to()
-        self.shadow_window.switch_to()
+    # Switch to the default context
+    # This is necessary on Linux nvidia drivers
+    # pyglet.gl._shadow_window.switch_to()
+    self.shadow_window.switch_to()
 
-        from pyglet import gl
-        # Bind the multisampled frame buffer
-        gl.glEnable(gl.GL_MULTISAMPLE)
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, multi_fbo)
-        gl.glViewport(0, 0, width, height)
+    from pyglet import gl
+    # Bind the multisampled frame buffer
+    gl.glEnable(gl.GL_MULTISAMPLE)
+    gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, multi_fbo)
+    gl.glViewport(0, 0, width, height)
 
-        # Clear the color and depth buffers
+    # Clear the color and depth buffers
 
-        c0, c1, c2 = self.horizon_color
-        gl.glClearColor(c0, c1, c2, 1.0)
-        gl.glClearDepth(1.0)
-        gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+    c0, c1, c2 = self.horizon_color
+    gl.glClearColor(c0, c1, c2, 1.0)
+    gl.glClearDepth(1.0)
+    gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
 
-        # Set the projection matrix
-        gl.glMatrixMode(gl.GL_PROJECTION)
-        gl.glLoadIdentity()
-        gl.gluPerspective(
-                self.cam_fov_y,
-                width / float(height),
-                0.04,
-                100.0
+    # Set the projection matrix
+    gl.glMatrixMode(gl.GL_PROJECTION)
+    gl.glLoadIdentity()
+    gl.gluPerspective(
+            self.cam_fov_y,
+            width / float(height),
+            0.04,
+            100.0
+    )
+
+    # Set modelview matrix
+    # Note: we add a bit of noise to the camera position for data augmentation
+    pos = self.cur_pos
+    angle = self.cur_angle
+    logger.info('Pos: %s angle %s' % (self.cur_pos, self.cur_angle))
+    if self.domain_rand:
+        pos = pos + self.randomization_settings['camera_noise']
+
+    x, y, z = pos + self.cam_offset
+    dx, dy, dz = get_dir_vec(angle)
+    gl.glMatrixMode(gl.GL_MODELVIEW)
+    gl.glLoadIdentity()
+
+    if self.draw_bbox:
+        y += 0.8
+        gl.glRotatef(90, 1, 0, 0)
+    elif not top_down:
+        y += self.cam_height
+        gl.glRotatef(self.cam_angle[0], 1, 0, 0)
+        gl.glRotatef(self.cam_angle[1], 0, 1, 0)
+        gl.glRotatef(self.cam_angle[2], 0, 0, 1)
+        gl.glTranslatef(0, 0, self._perturb(CAMERA_FORWARD_DIST))
+
+    if top_down:
+        gl.gluLookAt(
+                # Eye position
+                (self.grid_width * sim.road_tile_size) / 2,
+                5,
+                (self.grid_height * self.road_tile_size) / 2,
+                # Target
+                (self.grid_width * self.road_tile_size) / 2,
+                0,
+                (self.grid_height * self.road_tile_size) / 2,
+                # Up vector
+                0, 0, -1.0
+        )
+    else:
+        gl.gluLookAt(
+                # Eye position
+                x,
+                y,
+                z,
+                # Target
+                x + dx,
+                y + dy,
+                z + dz,
+                # Up vector
+                0, 1.0, 0.0
         )
 
-        # Set modelview matrix
-        # Note: we add a bit of noise to the camera position for data augmentation
-        pos = self.cur_pos
-        angle = self.cur_angle
-        logger.info('Pos: %s angle %s' % (self.cur_pos, self.cur_angle))
-        if self.domain_rand:
-            pos = pos + self.randomization_settings['camera_noise']
+    # Draw the ground quad
+    gl.glDisable(gl.GL_TEXTURE_2D)
+    gl.glColor3f(*self.ground_color)
+    gl.glPushMatrix()
+    gl.glScalef(50, 1, 50)
+    self.ground_vlist.draw(gl.GL_QUADS)
+    gl.glPopMatrix()
 
-        x, y, z = pos + self.cam_offset
-        dx, dy, dz = get_dir_vec(angle)
-        gl.glMatrixMode(gl.GL_MODELVIEW)
-        gl.glLoadIdentity()
+    # Draw the ground/noise triangles
+    self.tri_vlist.draw(gl.GL_TRIANGLES)
 
-        if self.draw_bbox:
-            y += 0.8
-            gl.glRotatef(90, 1, 0, 0)
-        elif not top_down:
-            y += self.cam_height
-            gl.glRotatef(self.cam_angle[0], 1, 0, 0)
-            gl.glRotatef(self.cam_angle[1], 0, 1, 0)
-            gl.glRotatef(self.cam_angle[2], 0, 0, 1)
-            gl.glTranslatef(0, 0, self._perturb(CAMERA_FORWARD_DIST))
+    # Draw the road quads
+    gl.glEnable(gl.GL_TEXTURE_2D)
+    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
+    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
 
-        if top_down:
-            gl.gluLookAt(
-                    # Eye position
-                    (self.grid_width * self.road_tile_size) / 2,
-                    5,
-                    (self.grid_height * self.road_tile_size) / 2,
-                    # Target
-                    (self.grid_width * self.road_tile_size) / 2,
-                    0,
-                    (self.grid_height * self.road_tile_size) / 2,
-                    # Up vector
-                    0, 0, -1.0
-            )
-        else:
-            gl.gluLookAt(
-                    # Eye position
-                    x,
-                    y,
-                    z,
-                    # Target
-                    x + dx,
-                    y + dy,
-                    z + dz,
-                    # Up vector
-                    0, 1.0, 0.0
-            )
+    # For each grid tile
+    for j in range(self.grid_height):
+        for i in range(self.grid_width):
+            # Get the tile type and angle
+            tile = self._get_tile(i, j)
 
-        # Draw the ground quad
-        gl.glDisable(gl.GL_TEXTURE_2D)
-        gl.glColor3f(*self.ground_color)
-        gl.glPushMatrix()
-        gl.glScalef(50, 1, 50)
-        self.ground_vlist.draw(gl.GL_QUADS)
-        gl.glPopMatrix()
+            if tile is None:
+                continue
 
-        # Draw the ground/noise triangles
-        self.tri_vlist.draw(gl.GL_TRIANGLES)
+            # kind = tile['kind']
+            angle = tile['angle']
+            color = tile['color']
+            texture = tile['texture']
 
-        # Draw the road quads
-        gl.glEnable(gl.GL_TEXTURE_2D)
-        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
-        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
+            gl.glColor3f(*color)
 
-        # For each grid tile
-        for j in range(self.grid_height):
-            for i in range(self.grid_width):
-                # Get the tile type and angle
-                tile = self._get_tile(i, j)
-
-                if tile is None:
-                    continue
-
-                # kind = tile['kind']
-                angle = tile['angle']
-                color = tile['color']
-                texture = tile['texture']
-
-                gl.glColor3f(*color)
-
-                gl.glPushMatrix()
-                gl.glTranslatef((i + 0.5) * self.road_tile_size, 0, (j + 0.5) * self.road_tile_size)
-                gl.glRotatef(angle * 90, 0, 1, 0)
-
-                # Bind the appropriate texture
-                texture.bind()
-
-                self.road_vlist.draw(gl.GL_QUADS)
-                gl.glPopMatrix()
-
-                if self.draw_curve and tile['drivable']:
-                    # Find curve with largest dotproduct with heading
-                    curves = self._get_tile(i, j)['curves']
-                    curve_headings = curves[:, -1, :] - curves[:, 0, :]
-                    curve_headings = curve_headings / np.linalg.norm(curve_headings).reshape(1, -1)
-                    dirVec = get_dir_vec(angle)
-                    dot_prods = np.dot(curve_headings, dirVec)
-
-                    # Current ("closest") curve drawn in Red
-                    pts = curves[np.argmax(dot_prods)]
-                    bezier_draw(pts, n=20, red=True)
-
-                    pts = self._get_curve(i, j)
-                    for idx, pt in enumerate(pts):
-                        # Don't draw current curve in blue
-                        if idx == np.argmax(dot_prods):
-                            continue
-                        bezier_draw(pt, n=20)
-
-        # For each object
-        for idx, obj in enumerate(self.objects):
-            obj.render(self.draw_bbox)
-
-        # Draw the agent's own bounding box
-        if self.draw_bbox:
-            corners = get_agent_corners(pos, angle)
-            gl.glColor3f(1, 0, 0)
-            gl.glBegin(gl.GL_LINE_LOOP)
-            gl.glVertex3f(corners[0, 0], 0.01, corners[0, 1])
-            gl.glVertex3f(corners[1, 0], 0.01, corners[1, 1])
-            gl.glVertex3f(corners[2, 0], 0.01, corners[2, 1])
-            gl.glVertex3f(corners[3, 0], 0.01, corners[3, 1])
-            gl.glEnd()
-
-        if top_down:
             gl.glPushMatrix()
-            gl.glTranslatef(*self.cur_pos)
-            gl.glScalef(1, 1, 1)
-            gl.glRotatef(self.cur_angle * 180 / np.pi, 0, 1, 0)
-            # glColor3f(*self.color)
-            self.mesh.render()
+            gl.glTranslatef((i + 0.5) * self.road_tile_size, 0, (j + 0.5) * self.road_tile_size)
+            gl.glRotatef(angle * 90, 0, 1, 0)
+
+            # Bind the appropriate texture
+            texture.bind()
+
+            self.road_vlist.draw(gl.GL_QUADS)
             gl.glPopMatrix()
 
-        # Resolve the multisampled frame buffer into the final frame buffer
-        gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, multi_fbo)
-        gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, final_fbo)
-        gl.glBlitFramebuffer(
-                0, 0,
-                width, height,
-                0, 0,
-                width, height,
-                gl.GL_COLOR_BUFFER_BIT,
-                gl.GL_LINEAR
-        )
+            if self.draw_curve and tile['drivable']:
+                # Find curve with largest dotproduct with heading
+                curves = self._get_tile(i, j)['curves']
+                curve_headings = curves[:, -1, :] - curves[:, 0, :]
+                curve_headings = curve_headings / np.linalg.norm(curve_headings).reshape(1, -1)
+                dirVec = get_dir_vec(angle)
+                dot_prods = np.dot(curve_headings, dirVec)
 
-        # Copy the frame buffer contents into a numpy array
-        # Note: glReadPixels reads starting from the lower left corner
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, final_fbo)
-        gl.glReadPixels(
-                0,
-                0,
-                width,
-                height,
-                gl.GL_RGB,
-                gl.GL_UNSIGNED_BYTE,
-                img_array.ctypes.data_as(POINTER(gl.GLubyte))
-        )
+                # Current ("closest") curve drawn in Red
+                pts = curves[np.argmax(dot_prods)]
+                bezier_draw(pts, n=20, red=True)
 
-        # Unbind the frame buffer
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0)
+                pts = self._get_curve(i, j)
+                for idx, pt in enumerate(pts):
+                    # Don't draw current curve in blue
+                    if idx == np.argmax(dot_prods):
+                        continue
+                    bezier_draw(pt, n=20)
 
-        # Flip the image because OpenGL maps (0,0) to the lower-left corner
-        # Note: this is necessary for gym.wrappers.Monitor to record videos
-        # properly, otherwise they are vertically inverted.
-        img_array = np.ascontiguousarray(np.flip(img_array, axis=0))
+    # For each object
+    for idx, obj in enumerate(self.objects):
+        obj.render(self.draw_bbox)
 
-        return img_array
+    # Draw the agent's own bounding box
+    if self.draw_bbox:
+        corners = get_agent_corners(pos, angle)
+        gl.glColor3f(1, 0, 0)
+        gl.glBegin(gl.GL_LINE_LOOP)
+        gl.glVertex3f(corners[0, 0], 0.01, corners[0, 1])
+        gl.glVertex3f(corners[1, 0], 0.01, corners[1, 1])
+        gl.glVertex3f(corners[2, 0], 0.01, corners[2, 1])
+        gl.glVertex3f(corners[3, 0], 0.01, corners[3, 1])
+        gl.glEnd()
 
-    def render_obs(self):
-        """
-        Render an observation from the point of view of the agent
-        """
+    if top_down:
+        gl.glPushMatrix()
+        gl.glTranslatef(*self.cur_pos)
+        gl.glScalef(1, 1, 1)
+        gl.glRotatef(self.cur_angle * 180 / np.pi, 0, 1, 0)
+        # glColor3f(*self.color)
+        self.mesh.render()
+        gl.glPopMatrix()
 
-        observation = self._render_img(
-                self.camera_width,
-                self.camera_height,
-                self.multi_fbo,
-                self.final_fbo,
-                self.img_array,
-                top_down=False
-        )
+    # Resolve the multisampled frame buffer into the final frame buffer
+    gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, multi_fbo)
+    gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, final_fbo)
+    gl.glBlitFramebuffer(
+            0, 0,
+            width, height,
+            0, 0,
+            width, height,
+            gl.GL_COLOR_BUFFER_BIT,
+            gl.GL_LINEAR
+    )
 
-        # self.undistort - for UndistortWrapper
-        if self.distortion and not self.undistort:
-            observation = self.camera_model.distort(observation)
+    # Copy the frame buffer contents into a numpy array
+    # Note: glReadPixels reads starting from the lower left corner
+    gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, final_fbo)
+    gl.glReadPixels(
+            0,
+            0,
+            width,
+            height,
+            gl.GL_RGB,
+            gl.GL_UNSIGNED_BYTE,
+            img_array.ctypes.data_as(POINTER(gl.GLubyte))
+    )
 
-        return observation
+    # Unbind the frame buffer
+    gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0)
 
-    def render(self, mode='human', close=False):
-        """
-        Render the environment for human viewing
-        """
+    # Flip the image because OpenGL maps (0,0) to the lower-left corner
+    # Note: this is necessary for gym.wrappers.Monitor to record videos
+    # properly, otherwise they are vertically inverted.
+    img_array = np.ascontiguousarray(np.flip(img_array, axis=0))
 
-        if close:
-            if self.window:
-                self.window.close()
-            return
+    return img_array
+=#
 
-        top_down = mode == 'top_down'
-        # Render the image
-        img = self._render_img(
-                WINDOW_WIDTH,
-                WINDOW_HEIGHT,
-                self.multi_fbo_human,
-                self.final_fbo_human,
-                self.img_array_human,
-                top_down=top_down
-        )
+function _render_img(args...) end
 
-        # self.undistort - for UndistortWrapper
-        if self.distortion and not self.undistort and mode != "free_cam":
-            img = self.camera_model.distort(img)
+function render_obs(sim::Simulator)
+    ##
+    #Render an observation from the point of view of the agent
+    ##
 
-        if mode == 'rgb_array':
-            return img
+    observation = _render_img(
+            sim.camera_width,
+            sim.camera_height,
+            sim.multi_fbo,
+            sim.final_fbo,
+            sim.img_array,
+            false
+    )
 
-        from pyglet import gl, window, image
+    # self.undistort - for UndistortWrapper
+    if sim.distortion && !sim.undistort
+        observation = distort(sim.camera_model, observation)
+    end
 
-        if self.window is None:
-            config = gl.Config(double_buffer=False)
-            self.window = window.Window(
-                    width=WINDOW_WIDTH,
-                    height=WINDOW_HEIGHT,
-                    resizable=False,
-                    config=config
-            )
+    return observation
+end
 
-        self.window.clear()
-        self.window.switch_to()
-        self.window.dispatch_events()
+#=
+def render(self, mode='human', close=False):
+    """
+    Render the environment for human viewing
+    """
 
-        # Bind the default frame buffer
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0)
+    if close:
+        if self.window:
+            self.window.close()
+        return
 
-        # Setup orghogonal projection
-        gl.glMatrixMode(gl.GL_PROJECTION)
-        gl.glLoadIdentity()
-        gl.glMatrixMode(gl.GL_MODELVIEW)
-        gl.glLoadIdentity()
-        gl.glOrtho(0, WINDOW_WIDTH, 0, WINDOW_HEIGHT, 0, 10)
+    top_down = mode == 'top_down'
+    # Render the image
+    img = self._render_img(
+            WINDOW_WIDTH,
+            WINDOW_HEIGHT,
+            self.multi_fbo_human,
+            self.final_fbo_human,
+            self.img_array_human,
+            top_down=top_down
+    )
 
-        # Draw the image to the rendering window
-        width = img.shape[1]
-        height = img.shape[0]
-        img = np.ascontiguousarray(np.flip(img, axis=0))
-        img_data = image.ImageData(
-                width,
-                height,
-                'RGB',
-                img.ctypes.data_as(POINTER(gl.GLubyte)),
-                pitch=width * 3,
-        )
-        img_data.blit(
-                0,
-                0,
-                0,
+    # self.undistort - for UndistortWrapper
+    if self.distortion and not self.undistort and mode != "free_cam":
+        img = self.camera_model.distort(img)
+
+    if mode == 'rgb_array':
+        return img
+
+    from pyglet import gl, window, image
+
+    if self.window is None:
+        config = gl.Config(double_buffer=False)
+        self.window = window.Window(
                 width=WINDOW_WIDTH,
-                height=WINDOW_HEIGHT
+                height=WINDOW_HEIGHT,
+                resizable=False,
+                config=config
         )
 
-        # Display position/state information
-        if mode != "free_cam":
-            x, y, z = self.cur_pos
-            self.text_label.text = "pos: (%.2f, %.2f, %.2f), angle: %d, steps: %d, speed: %.2f m/s" % (
-                x, y, z,
-                int(self.cur_angle * 180 / math.pi),
-                self.step_count,
-                self.speed
-            )
-            self.text_label.draw()
+    self.window.clear()
+    self.window.switch_to()
+    self.window.dispatch_events()
 
-        # Force execution of queued commands
-        gl.glFlush()
+    # Bind the default frame buffer
+    gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0)
+
+    # Setup orghogonal projection
+    gl.glMatrixMode(gl.GL_PROJECTION)
+    gl.glLoadIdentity()
+    gl.glMatrixMode(gl.GL_MODELVIEW)
+    gl.glLoadIdentity()
+    gl.glOrtho(0, WINDOW_WIDTH, 0, WINDOW_HEIGHT, 0, 10)
+
+    # Draw the image to the rendering window
+    width = img.shape[1]
+    height = img.shape[0]
+    img = np.ascontiguousarray(np.flip(img, axis=0))
+    img_data = image.ImageData(
+            width,
+            height,
+            'RGB',
+            img.ctypes.data_as(POINTER(gl.GLubyte)),
+            pitch=width * 3,
+    )
+    img_data.blit(
+            0,
+            0,
+            0,
+            width=WINDOW_WIDTH,
+            height=WINDOW_HEIGHT
+    )
+
+    # Display position/state information
+    if mode != "free_cam":
+        x, y, z = self.cur_pos
+        self.text_label.text = "pos: (%.2f, %.2f, %.2f), angle: %d, steps: %d, speed: %.2f m/s" % (
+            x, y, z,
+            int(self.cur_angle * 180 / math.pi),
+            self.step_count,
+            self.speed
+        )
+        self.text_label.draw()
+
+    # Force execution of queued commands
+    gl.glFlush()
+
+=#
 
 
-def get_dir_vec(cur_angle):
-    """
-    Vector pointing in the direction the agent is looking
-    """
-
-    x = math.cos(cur_angle)
-    z = -math.sin(cur_angle)
-    return np.array([x, 0, z])
-
-
-def get_right_vec(cur_angle):
-    """
-    Vector pointing to the right of the agent
-    """
-
-    x = math.sin(cur_angle)
-    z = math.cos(cur_angle)
-    return np.array([x, 0, z])
-
-
-def _update_pos(pos, angle, wheel_dist, wheelVels, deltaTime):
-    """
-    Update the position of the robot, simulating differential drive
-
-    returns new_pos, new_angle
-    """
+function _update_pos(pos, angle, wheel_dist, wheelVels, deltaTime)
+    ##
+    #Update the position of the robot, simulating differential drive
+    #
+    #returns new_pos, new_angle
+    ##
 
     Vl, Vr = wheelVels
     l = wheel_dist
 
     # If the wheel velocities are the same, then there is no rotation
-    if Vl == Vr:
-        pos = pos + deltaTime * Vl * get_dir_vec(angle)
+    if Vl == Vr
+        pos = pos .+ deltaTime * Vl * get_dir_vec(angle)
         return pos, angle
+    end
 
     # Compute the angular rotation velocity about the ICC (center of curvature)
     w = (Vr - Vl) / l
 
     # Compute the distance to the center of curvature
-    r = (l * (Vl + Vr)) / (2 * (Vl - Vr))
+    r = (l * (Vl + Vr)) / (2(Vl - Vr))
 
     # Compute the rotation angle for this time step
     rotAngle = w * deltaTime
 
     # Rotate the robot's position around the center of rotation
     r_vec = get_right_vec(angle)
-    px, py, pz = pos
-    cx = px + r * r_vec[0]
-    cz = pz + r * r_vec[2]
-    npx, npz = rotate_point(px, pz, cx, cz, rotAngle)
-    pos = np.array([npx, py, npz])
+    px, py, pz = pos[1:1], pos[2:2], pos[3:3]
+    cx = px + r * r_vec[1:1]
+    cz = pz + r * r_vec[3:3]
+    npx, npz = rotate_point.(px, pz, cx, cz, rotAngle)
+    pos = vcat(npx, py, npz)
 
     # Update the robot's direction angle
-    angle += rotAngle
+    angle = angle + rotAngle
     return pos, angle
+end
 
 
-def _actual_center(pos, angle):
-    """
-    Calculate the position of the geometric center of the agent
-    The value of self.cur_pos is the center of rotation.
-    """
+function _actual_center(pos, angle)
+    ##
+    #Calculate the position of the geometric center of the agent
+    #The value of self.cur_pos is the center of rotation.
+    ##
 
     dir_vec = get_dir_vec(angle)
-    return pos + (CAMERA_FORWARD_DIST - (ROBOT_LENGTH / 2)) * dir_vec
+    return pos .+ (CAMERA_FORWARD_DIST - (ROBOT_LENGTH / 2)) .* dir_vec
+end
 
 
-def get_agent_corners(pos, angle):
+function get_agent_corners(pos, angle)
     agent_corners = agent_boundbox(
             _actual_center(pos, angle),
             ROBOT_WIDTH,
@@ -1772,3 +1571,4 @@ def get_agent_corners(pos, angle):
             get_right_vec(angle)
     )
     return agent_corners
+end

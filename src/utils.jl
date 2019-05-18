@@ -1,5 +1,6 @@
 # coding=utf-8
 
+add_axis(x) = reshape(x, size(x)..., 1)
 
 function get_subdir_path(sub_dir::String)
     # Get the directory this module is located in
@@ -29,7 +30,7 @@ function get_file_path(sub_dir::String, file_name::String, default_ext::String)
     subdir_path = get_subdir_path(sub_dir)
     file_path = joinpath(subdir_path, file_name)
 
-    if "." ∉ file_name:
+    if '.' ∉ file_name
         file_path *= "." * default_ext
     end
 
