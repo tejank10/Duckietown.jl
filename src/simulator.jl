@@ -86,7 +86,6 @@ REWARD_INVALID_POSE = -1000
 MAX_SPAWN_ATTEMPTS = 5000
 
 struct LanePosition
-    lane_position
     dist
     dot_dor
     angle_deg
@@ -119,8 +118,9 @@ mutable struct Simulator <: Gym.AbstractEnv
     draw_bbox::Bool                 # Flag to draw bounding boxes
     domain_rand::Bool               # Flag to enable/disable domain randomization
     randomizer::Union{Randomizer, Nothing}
-    frame_rate::Integer             # Frame rate to run at
-    frame_skip::Bool                # Number of frames to skip per action
+    randomization_settings::Union{Dict, Nothing}
+    frame_rate::Int                 # Frame rate to run at
+    frame_skip::Int                 # Number of frames to skip per action
     delta_time::Real
     camera_width::Real
     camera_height::Real
@@ -148,10 +148,10 @@ mutable struct Simulator <: Gym.AbstractEnv
     wheel_dist::Float32
     cam_height::Float32
     cam_angle::Vector
-    cam_fov_y::Vector
+    cam_fov_y::Real
     cam_offset::Vector
     cur_pos::Union{Vector, Nothing}
-    cur_angle::Union{Vector, Nothing}
+    cur_angle::Union{Real, Nothing}
 end
 
 function Simulator(
@@ -196,10 +196,8 @@ function Simulator(
 
     _map = Map(map_name, domain_rand)
 
-    randomizer = nothing
-    if domain_rand
-        randomizer = Randomizer()
-    end
+    randomizer = domain_rand ? Randomizer() : nothing
+    randomization_settings = nothing
 
     delta_time = 1.0 / frame_rate
 
@@ -207,22 +205,12 @@ function Simulator(
     graphics = true
 
     # Two-tuple of wheel torques, each in the range [-1, 1]
-    action_space = Space.Box(
-            low=-1,
-            high=1,
-            shape=(2,),
-            dtype=Float32
-    )
+    action_space = Space.Box(-1, 1, (2,), Float32)
 
     # We observe an RGB image with pixels in [0, 255]
     # Note: the pixels are in UInt8 format because this is more compact
     # than Float32 if sent over the network or stored in a dataset
-    observation_space = Space.Box(
-            low=0,
-            high=255,
-            shape=(camera_height, camera_width, 3),
-            dtype=UInt8
-    )
+    observation_space = Space.Box(0, 255, (camera_height, camera_width, 3), UInt8)
 
     reward_range = (-1000, 1000)
 
@@ -311,14 +299,14 @@ function Simulator(
     cur_pos = nothing
     cur_angle = nothing
     sim = Simulator(rng, _map, max_steps, draw_curve, draw_bbox, domain_rand,
-                    randomizer, frame_rate, frame_skip, delta_time, camera_width,
-                    camera_height, robot_speed, action_space, observation_space,
-                    reward_range, accept_start_angle_deg, full_transparency,
-                    user_tile_start, distortion, randomize_maps_on_reset,
-                    last_action, wheelVels, camera_model, map_names, undistort,
-                    step_count, timestamp, speed, horizon_color, ground_color,
-                    wheel_dist, cam_height, cam_angle, cam_fov_y, cam_offset,
-                    cur_pos, cur_angle)
+                    randomizer, randomization_settings, frame_rate, frame_skip,
+                    delta_time, camera_width, camera_height, robot_speed,
+                    action_space, observation_space, reward_range,
+                    accept_start_angle_deg, full_transparency, user_tile_start,
+                    distortion, randomize_maps_on_reset, last_action, wheelVels,
+                    camera_model, map_names, undistort, step_count, timestamp,
+                    speed, horizon_color, ground_color, wheel_dist, cam_height,
+                    cam_angle, cam_fov_y, cam_offset, cur_pos, cur_angle)
 
     # Initialize the state
     reset!(sim)
@@ -357,6 +345,108 @@ function _init_vlists(road_tile_size)
     #ground_vlist = pyglet.graphics.vertex_list(4, ("v3f", verts))
 
     return road_vlist, ground_vlist
+end
+
+function closest_curve_point(sim::Simulator, pos, angle=Nothing)
+    ##
+    #    Get the closest point on the curve to a given point
+    #    Also returns the tangent at that point.
+    #
+    #    Returns nothing, nothing if not in a lane.
+    ##
+
+    i, j = get_grid_coords(sim._map._grid.road_tile_size, pos)
+    tile = _get_tile(sim._map._grid._grid, i, j)
+
+    if isa(tile, Nothing) || !tile["drivable"]
+        return nothing, nothing
+    end
+
+    # Find curve with largest dotproduct with heading
+    curves = _get_tile(sim._map._grid._grid, i, j)["curves"]
+    curve_headings = vcat(map(curve->curve[end:end, :] .- curve[1:1, :], curves)...)
+    curve_headings = curve_headings / norm(curve_headings)
+    curve_headings = [curve_headings[i, :] for i in 1:size(curve_headings)[1]]
+    dir_vec = get_dir_vec(angle)
+
+    dot_prods = dot.(curve_headings, [dir_vec])
+
+    # Closest curve = one with largest dotprod
+    max_idx = argmax(dot_prods)
+    cps = curves[max_idx]
+
+    # Find closest point and tangent to this curve
+    t = bezier_closest(cps, pos)
+    point = bezier_point(cps, t)
+    tangent = bezier_tangent(cps, t)
+
+    return point, tangent
+end
+
+function get_lane_pos2(sim::Simulator, pos, angle)
+    ##
+    #Get the position of the agent relative to the center of the right lane
+    #
+    #Raises NotInLane if the Duckiebot is not in a lane.
+    ##
+
+    # Get the closest point along the right lane's Bezier curve,
+    # and the tangent at that point
+    point, tangent = closest_curve_point(sim, pos, angle)
+    if isa(point, Nothing)
+        msg = "Point not in lane: $pos"
+        throw(NotInLane(msg))
+    end
+
+    @assert !isa(point, Nothing)
+
+    # Compute the alignment of the agent direction with the curve tangent
+    dirVec = get_dir_vec(angle)
+    dotDir = dot(dirVec, tangent)
+    dotDir = max(-1, min(1, dotDir))
+
+    # Compute the signed distance to the curve
+    # Right of the curve is negative, left is positive
+    posVec = pos .- point
+    upVec = [0, 1, 0]
+    rightVec = cross(tangent, upVec)
+    signedDist = dot(posVec, rightVec)
+
+    # Compute the signed angle between the direction and curve tangent
+    # Right of the tangent is negative, left is positive
+    angle_rad = acos(dotDir)
+
+    if dot(dirVec, rightVec) < 0
+        angle_rad *= -1
+    end
+
+    angle_deg = rad2deg(angle_rad)
+    # return signedDist, dotDir, angle_deg
+
+    return LanePosition(signedDist, dotDir, angle_deg, angle_rad)
+end
+
+
+function _drivable_pos(grid::Grid, pos)
+    ##
+    #Check that the given (x,y,z) position is on a drivable tile
+    ##
+
+    coords = get_grid_coords(grid.road_tile_size, pos)
+    tile = _get_tile(grid._grid, coords...)
+    if isa(tile, Nothing)
+        msg = "No tile found at $pos $coords"
+        #logger.debug(msg)
+        return false
+    end
+
+    if !tile["drivable"]
+        msg = "$pos corresponds to tile at $coords which is not drivable: $tile"
+        #logger.debug(msg)
+        return false
+    end
+
+    return true
 end
 
 function reset!(sim::Simulator)
@@ -443,10 +533,12 @@ function reset!(sim::Simulator)
     verts = []
     colors = []
     for _ in 0 : 3numTris
-        p = rand.(sim.rng, Uniform.([-20, -0.6, -20], [20, -0.3, 20]))
+        p = [rand(sim.rng, Uniform(-20, 20)),
+             rand(sim.rng, Uniform(-0.6f0, -0.3f0)),
+             rand(sim.rng, Uniform(-20, 20))]
         c = rand(sim.rng, Uniform(0, 0.9))
         c = _perturb(sim, [c, c, c], 0.1)
-        verts = vcat(vets, p[1:1], p[2:2], p[3:3])
+        verts = vcat(verts, p[1:1], p[2:2], p[3:3])
         colors = vcat(colors, c[1:1], c[2:2], c[3:3])
     end
     #=
@@ -455,7 +547,7 @@ function reset!(sim::Simulator)
     =#
     # Randomize tile parameters
     #TODO: fix all rands
-    for tile in sim._map._grid
+    for tile in sim._map._grid._grid
         rng = sim.domain_rand ? sim.rng : nothing
         # Randomize the tile texture
         tile["texture"] = Graphics.get(tile["kind"], rng)
@@ -465,7 +557,7 @@ function reset!(sim::Simulator)
     end
 
     # Randomize object parameters
-    for obj in sim._map._grid.objects
+    for obj in sim._map._grid.obj_data.objects
         # Randomize the object color
         obj.color = _perturb(sim, [1, 1, 1], 0.3)
 
@@ -481,14 +573,14 @@ function reset!(sim::Simulator)
     if !isa(sim.user_tile_start, Nothing)
         #logger.info('using user tile start: %s' % self.user_tile_start)
         i, j = sim.user_tile_start
-        tile = _get_tile(sim._map._grid, i, j)
+        tile = _get_tile(sim._map._grid._grid, i, j)
         if isa(tile, Nothing)
             msg = "The tile specified does not exist."
             throw(error(msg))
         end
         #logger.debug('tile: %s' % tile)
     else
-        if !isa(sim.start_tile, Nothing)
+        if !isa(sim._map._grid.start_tile, Nothing)
             tile = sim.start_tile
         else
             # Select a random drivable tile to start on
@@ -499,6 +591,7 @@ function reset!(sim::Simulator)
 
     # Keep trying to find a valid spawn position on this tile
 
+    propose_pos, propose_angle = nothing, nothing
 
     for iter in 1:MAX_SPAWN_ATTEMPTS
         i, j = tile["coords"]
@@ -524,11 +617,13 @@ function reset!(sim::Simulator)
         invalid && continue
 
         # If the angle is too far away from the driving direction, retry
+        lp = nothing
         try
             lp = get_lane_pos2(sim, propose_pos, propose_angle)
         catch y
             isa(y, NotInLane) && continue
         end
+
         M = sim.accept_start_angle_deg
         ok = -M < lp.angle_deg < +M
         if !ok
@@ -548,7 +643,7 @@ function reset!(sim::Simulator)
     #logger.info('Starting at %s %s' % (sim.cur_pos, sim.cur_angle))
 
     # Generate the first camera image
-    obs = render_obs(sims)
+    obs = render_obs(sim)
 end
 
 function close(sim::Simulator) end
@@ -628,150 +723,7 @@ function get_grid_coords(road_tile_size, abs_pos)
     i = floor(x / road_tile_size)
     j = floor(z / road_tile_size)
 
-    return Int(i), Int(j)
-end
-
-function _get_curve(grid, i, j, road_tile_size)
-    ##
-    #    Get the Bezier curve control points for a given tile
-    #
-    tile = _get_tile(grid, i, j)
-    @assert !isa(tile, Nothing)
-
-    kind = tile["kind"]
-    angle = tile["angle"]
-
-    # Each tile will have a unique set of control points,
-    # Corresponding to each of its possible turns
-
-    if startswith(kind, "straight")
-        pts = cat(
-                [-0.20 0 -0.50;
-                 -0.20 0 -0.25;
-                 -0.20 0  0.25;
-                 -0.20 0  0.50],
-
-                [0.20 0  0.50;
-                 0.20 0  0.25;
-                 0.20 0 -0.25;
-                 0.20 0 -0.50],
-            dims=3) .* road_tile_size
-
-    elseif kind == "curve_left"
-        pts = cat(
-                [-0.20 0 -0.50;
-                 -0.20 0  0.00;
-                  0.00 0  0.20;
-                  0.50 0  0.20],
-
-                [0.50 0 -0.20;
-                 0.30 0 -0.20;
-                 0.20 0 -0.30;
-                 0.20 0 -0.50],
-            dims=3) .* road_tile_size
-
-    elseif kind == "curve_right"
-        pts = cat(
-                [-0.20 0 -0.50;
-                 -0.20 0 -0.20;
-                 -0.30 0 -0.20;
-                 -0.50 0 -0.20],
-
-                [-0.50 0  0.20;
-                 -0.30 0  0.20;
-                  0.30 0  0.00;
-                  0.20 0 -0.50],
-            dims=3) .* road_tile_size
-
-    # Hardcoded all curves for 3way intersection
-    elseif startswith(kind, "3way")
-        pts = cat(
-                [-0.20 0 -0.50;
-                 -0.20 0 -0.25;
-                 -0.20 0  0.25;
-                 -0.20 0  0.50],
-
-                [-0.20 0 -0.50;
-                 -0.20 0  0.00;
-                  0.00 0  0.20;
-                  0.50 0  0.20],
-
-                [0.20 0  0.50;
-                 0.20 0  0.25;
-                 0.20 0 -0.25;
-                 0.20 0 -0.50],
-
-                [0.50 0 -0.20;
-                 0.30 0 -0.20;
-                 0.20 0 -0.20;
-                 0.20 0 -0.50],
-
-                [0.20 0 0.50;
-                 0.20 0 0.20;
-                 0.30 0 0.20;
-                 0.50 0 0.20],
-
-                [ 0.50 0 -0.20;
-                  0.30 0 -0.20;
-                 -0.20 0  0.00;
-                 -0.20 0  0.50],
-            dims=3) .* road_tile_size
-
-    # Template for each side of 4way intersection
-    elseif startswith(kind, "4way")
-        pts = cat(
-                [-0.20 0 -0.50;
-                 -0.20 0  0.00;
-                  0.00 0  0.20;
-                  0.50 0  0.20],
-
-                [-0.20 0 -0.50;
-                 -0.20 0 -0.25;
-                 -0.20 0  0.25;
-                 -0.20 0  0.50],
-
-                [-0.20 0 -0.50;
-                 -0.20 0 -0.20;
-                 -0.30 0 -0.20;
-                 -0.50 0 -0.20],
-            dims=3) .* road_tile_size
-    else
-        @assert false kind
-    end
-
-    # Rotate and align each curve with its place in global frame
-    if startswith(kind, "4way")
-        fourway_pts = []
-        # Generate all four sides' curves,
-        # with 3-points template above
-        for rot in 1:4
-            mat = gen_rot_matrix([0, 1, 0], rot * π / 2)
-            pts_new = pts .* mat
-            pts_new = pts_new .+ [(i + 0.5) .* road_tile_size, 0, (j + 0.5) .* road_tile_size]
-            push!(fourway_pts, pts_new)
-        end
-        fourway_pts = reshape(fourway_pts, 12, 4, 3)
-        return fourway_pts
-
-    # Hardcoded each curve; just rotate and shift
-    elseif startswith(kind, "3way")
-        threeway_pts = []
-        mat = gen_rot_matrix([0, 1, 0], angle * π / 2)
-        #NOTE: pts is 3D matrix, find a work around if * does not work
-        pts_new = pts * mat
-        pts_new = pts_new .+ [(i + 0.5) * road_tile_size, 0, (j + 0.5) * road_tile_size]
-        push!(threeway_pts, pts_new)
-
-        threeway_pts = reshape(threeway_pts, 6, 4, 3)
-        return threeway_pts
-
-    else
-        mat = gen_rot_matrix([0, 1, 0], angle * π / 2)
-        pts = pts * mat
-        pts = pts .+ [(i + 0.5) * road_tile_size, 0, (j + 0.5) * road_tile_size]
-    end
-
-    return pts
+    return Int.((i, j))
 end
 
 get_dir_vec(sim::Simulator) = get_dir_vec(sim.cur_angle)
@@ -797,105 +749,6 @@ function get_right_vec(angle)
     x = sin(angle)
     z = cos(angle)
     return vcat(x, 0, z)
-end
-
-function closest_curve_point(sim::Simulator, pos, angle=Nothing)
-    ##
-    #    Get the closest point on the curve to a given point
-    #    Also returns the tangent at that point.
-    #
-    #    Returns nothing, nothing if not in a lane.
-    ##
-
-    i, j = get_grid_coords(sim, pos)
-    tile = _get_tile(sim, i, j)
-
-    if isa(tile, Nothing) || !tile["drivable"]
-        return nothing, nothing
-    end
-
-    # Find curve with largest dotproduct with heading
-    curves = _get_tile(sim, i, j)["curves"]
-    curve_headings = curves[:, end, :] .- curves[:, 1, :]
-    curve_headings = curve_headings ./ reshape(norm(curve_headings), 1, :)
-    dir_vec = get_dir_vec(angle)
-
-    dot_prods = dot(curve_headings, dir_vec)
-
-    # Closest curve = one with largest dotprod
-    cps = curves[np.argmax(dot_prods)]
-
-    # Find closest point and tangent to this curve
-    t = bezier_closest(cps, pos)
-    point = bezier_point(cps, t)
-    tangent = bezier_tangent(cps, t)
-
-    return point, tangent
-end
-
-function get_lane_pos2(sim::Simulator, pos, angle)
-    ##
-    #Get the position of the agent relative to the center of the right lane
-    #
-    #Raises NotInLane if the Duckiebot is not in a lane.
-    ##
-
-    # Get the closest point along the right lane's Bezier curve,
-    # and the tangent at that point
-    point, tangent = closest_curve_point(sim, pos, angle)
-    if isa(point, Nothing)
-        msg = "Point not in lane: $pos"
-        throw(NotInLane(msg))
-    end
-
-    @assert !isa(point, Nothing)
-
-    # Compute the alignment of the agent direction with the curve tangent
-    dirVec = get_dir_vec(angle)
-    dotDir = dot(dirVec, tangent)
-    dotDir = max(-1, min(1, dotDir))
-
-    # Compute the signed distance to the curve
-    # Right of the curve is negative, left is positive
-    posVec = pos .- point
-    upVec = [0, 1, 0]
-    rightVec = cross(tangent, upVec)
-    signedDist = dot(posVec, rightVec)
-
-    # Compute the signed angle between the direction and curve tangent
-    # Right of the tangent is negative, left is positive
-    angle_rad = acos(dotDir)
-
-    if dot(dirVec, rightVec) < 0
-        angle_rad *= -1
-    end
-
-    angle_deg = rad2deg(angle_rad)
-    # return signedDist, dotDir, angle_deg
-
-    return LanePosition(signedDist, dotDir, angle_deg, angle_rad)
-end
-
-function _drivable_pos(sim::Simulator, pos)
-    ##
-    #Check that the given (x,y,z) position is on a drivable tile
-    ##
-
-    coords = get_grid_coords(sim, pos)
-    tile = _get_tile(sim, coords...)
-    if isa(tile, Nothing)
-        msg = "No tile found at $pos $coords"
-        #logger.debug(msg)
-        return false
-    end
-
-    if !tile["drivable"]
-        msg = "$pos corresponds to tile at $coords which is not drivable: $tile"
-        #logger.debug(msg)
-        return false
-    end
-
-    return true
 end
 
 function _proximity_penalty2(sim::Simulator, pos, angle)
@@ -937,7 +790,7 @@ function _inconvenient_spawn(sim::Simulator, pos)
 
     results = [norm(x.pos .- pos) <
                max(x.max_coords) * 0.5 * x.scale + MIN_SPAWN_OBJ_DIST
-               for x in sim._map._grid.objects if x.visible
+               for x in sim._map._grid.obj_data.objects if x.visible
                ]
     return any(results)
 end
@@ -948,7 +801,7 @@ function _collision(sim::Simulator, agent_corners)
     ##
 
     # If there are no objects to collide against, stop
-    length(sim.collidable_corners) == 0 && (return false)
+    length(sim._map._grid.obj_data.collidable_corners) == 0 && (return false)
 
     # Generate the norms corresponding to each face of BB
     agent_norm = generate_norm(agent_corners)
@@ -991,10 +844,10 @@ function _valid_pose(sim::Simulator, pos, angle, safety_factor=1.0)
     # Check that the center position and
     # both wheels are on drivable tiles and no collisions
 
-    all_drivable = (_drivable_pos(sim, pos) &&
-                    _drivable_pos(sim, l_pos) &&
-                    _drivable_pos(sim, r_pos) &&
-                    _drivable_pos(sim, f_pos))
+    all_drivable = (_drivable_pos(sim._map._grid, pos) &&
+                    _drivable_pos(sim._map._grid, l_pos) &&
+                    _drivable_pos(sim._map._grid, r_pos) &&
+                    _drivable_pos(sim._map._grid, f_pos))
 
 
     # Recompute the bounding boxes (BB) for the agent
@@ -1040,10 +893,10 @@ function update_physics(sim::Simulator, action, delta_time)
     # Update world objects
     for obj in self.objects
         if !obj.static && obj.kind == "duckiebot"
-            obj_i, obj_j = get_grid_coords(sim, obj.pos)
+            obj_i, obj_j = get_grid_coords(sim._map._grid.road_tile_size, obj.pos)
             same_tile_obj = [
                 o for o in sim._map._grid.objects if
-                tuple(get_grid_coords(sim, o.pos)...,) == (obj_i, obj_j) && o != obj
+                tuple(get_grid_coords(sim._map._grid.road_tile_size, o.pos)...,) == (obj_i, obj_j) && o != obj
             ]
 
             step!(sim, delta_time, sim.closest_curve_point, same_tile_obj)
@@ -1089,7 +942,7 @@ function get_agent_info(sim::Simulator)
         #                                                        'theta': angle}}
 
         info["timestamp"] = sim.timestamp
-        info["tile_coords"] = [get_grid_coords(sim, pos)]
+        info["tile_coords"] = [get_grid_coords(sim._map._grid.road_tile_size, pos)]
         # info['map_data'] = self.map_data
     end
     misc = Dict()
@@ -1189,13 +1042,12 @@ function _compute_done_reward(sim::Simulator)
     return DoneRewardInfo(done, msg, reward, done_code)
 end
 
-#=
-def _render_img(self, width, height, multi_fbo, final_fbo, img_array, top_down=True):
-    """
-    Render an image of the environment into a frame buffer
-    Produce a numpy RGB array image as output
-    """
-
+function _render_img(sim::Simulator, width, height, multi_fbo, final_fbo, img_array, top_down=true)
+    ##
+    #Render an image of the environment into a frame buffer
+    #Produce a numpy RGB array image as output
+    ##
+    #=
     if not self.graphics:
         return
 
@@ -1397,8 +1249,7 @@ def _render_img(self, width, height, multi_fbo, final_fbo, img_array, top_down=T
 
     return img_array
 =#
-
-function _render_img(args...) end
+end
 
 function render_obs(sim::Simulator)
     ##
@@ -1422,12 +1273,11 @@ function render_obs(sim::Simulator)
     return observation
 end
 
-#=
-def render(self, mode='human', close=False):
-    """
-    Render the environment for human viewing
-    """
-
+function render(sim::Simulator, mode="human", close=false)
+    ##
+    #Render the environment for human viewing
+    ##
+    #=
     if close:
         if self.window:
             self.window.close()
@@ -1508,9 +1358,8 @@ def render(self, mode='human', close=False):
 
     # Force execution of queued commands
     gl.glFlush()
-
 =#
-
+end
 
 function _update_pos(pos, angle, wheel_dist, wheelVels, deltaTime)
     ##

@@ -18,12 +18,12 @@ function agent_boundbox(true_pos, width, length, f_vec, r_vec)
     hlength = length / 2
 
     # Indexing to make sure we only get the x/z dims
-    corners = ([
+    corners = hcat(
         true_pos - hwidth * r_vec - hlength * f_vec,
         true_pos + hwidth * r_vec - hlength * f_vec,
         true_pos + hwidth * r_vec + hlength * f_vec,
         true_pos - hwidth * r_vec + hlength * f_vec
-    ])[:, [1, 3]]
+    )[[1, 3], :]
 end
 
 function tensor_sat_test(norm, corners)

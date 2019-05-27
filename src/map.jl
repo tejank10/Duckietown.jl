@@ -1,4 +1,3 @@
-
 struct ObjectData
     objects::Vector
     object_corners
@@ -120,11 +119,156 @@ function ObjectData(map_data::Dict, road_tile_size, domain_rand)
 end
 
 
+function _get_curve(grid, i, j, road_tile_size)
+    ##
+    #    Get the Bezier curve control points for a given tile
+    #
+    tile = _get_tile(grid, i, j)
+    @assert !isa(tile, Nothing)
+
+    kind = tile["kind"]
+    angle = tile["angle"]
+
+    # Each tile will have a unique set of control points,
+    # Corresponding to each of its possible turns
+
+    if startswith(kind, "straight")
+        pts = [
+                [-0.20 0 -0.50;
+                 -0.20 0 -0.25;
+                 -0.20 0  0.25;
+                 -0.20 0  0.50],
+
+                [0.20 0  0.50;
+                 0.20 0  0.25;
+                 0.20 0 -0.25;
+                 0.20 0 -0.50],
+              ] .* road_tile_size
+
+    elseif kind == "curve_left"
+        pts = [
+                [-0.20 0 -0.50;
+                 -0.20 0  0.00;
+                  0.00 0  0.20;
+                  0.50 0  0.20],
+
+                [0.50 0 -0.20;
+                 0.30 0 -0.20;
+                 0.20 0 -0.30;
+                 0.20 0 -0.50],
+              ] .* road_tile_size
+
+    elseif kind == "curve_right"
+        pts = [
+                [-0.20 0 -0.50;
+                 -0.20 0 -0.20;
+                 -0.30 0 -0.20;
+                 -0.50 0 -0.20],
+
+                [-0.50 0  0.20;
+                 -0.30 0  0.20;
+                  0.30 0  0.00;
+                  0.20 0 -0.50],
+              ] .* road_tile_size
+
+    # Hardcoded all curves for 3way intersection
+    elseif startswith(kind, "3way")
+        pts = [
+                [-0.20 0 -0.50;
+                 -0.20 0 -0.25;
+                 -0.20 0  0.25;
+                 -0.20 0  0.50],
+
+                [-0.20 0 -0.50;
+                 -0.20 0  0.00;
+                  0.00 0  0.20;
+                  0.50 0  0.20],
+
+                [0.20 0  0.50;
+                 0.20 0  0.25;
+                 0.20 0 -0.25;
+                 0.20 0 -0.50],
+
+                [0.50 0 -0.20;
+                 0.30 0 -0.20;
+                 0.20 0 -0.20;
+                 0.20 0 -0.50],
+
+                [0.20 0 0.50;
+                 0.20 0 0.20;
+                 0.30 0 0.20;
+                 0.50 0 0.20],
+
+                [ 0.50 0 -0.20;
+                  0.30 0 -0.20;
+                 -0.20 0  0.00;
+                 -0.20 0  0.50],
+              ] .* road_tile_size
+
+    # Template for each side of 4way intersection
+    elseif startswith(kind, "4way")
+        pts = [
+                [-0.20 0 -0.50;
+                 -0.20 0  0.00;
+                  0.00 0  0.20;
+                  0.50 0  0.20],
+
+                [-0.20 0 -0.50;
+                 -0.20 0 -0.25;
+                 -0.20 0  0.25;
+                 -0.20 0  0.50],
+
+                [-0.20 0 -0.50;
+                 -0.20 0 -0.20;
+                 -0.30 0 -0.20;
+                 -0.50 0 -0.20],
+              ] .* road_tile_size
+    else
+        @assert false kind
+    end
+
+    # Rotate and align each curve with its place in global frame
+    if startswith(kind, "4way")
+        fourway_pts = []
+        # Generate all four sides' curves,
+        # with 3-points template above
+        for rot in 1:4
+            mat = gen_rot_matrix([0, 1, 0], rot * π / 2)
+            pts_new = map(x -> x * mat, pts)
+            add_vec = [(i + 0.5) * road_tile_size 0 (j + 0.5) * road_tile_size;]
+            pts_new = map(x-> x .+ add_vec, pts_new)
+            push!(fourway_pts, pts_new)
+        end
+        return fourway_pts
+
+    # Hardcoded each curve; just rotate and shift
+    elseif startswith(kind, "3way")
+        threeway_pts = []
+        mat = gen_rot_matrix([0, 1, 0], angle * π / 2)
+        #NOTE: pts is 3D matrix, find a work around if * does not work
+        pts_new = map(x -> x * mat, pts)
+        add_vec = [(i + 0.5) * road_tile_size 0 (j + 0.5) * road_tile_size;]
+        pts_new = map(x -> x .+ add_vec, pts_new)
+        push!(threeway_pts, pts_new)
+
+        return threeway_pts
+
+    else
+        mat = gen_rot_matrix([0, 1, 0], angle * π / 2)
+        pts = map(x -> x * mat, pts)
+        add_vec = [(i + 0.5) * road_tile_size 0 (j + 0.5) * road_tile_size;]
+        pts = map(x -> x .+ add_vec, pts)
+    end
+
+    return pts
+end
+
 struct Grid
     road_tile_size
     grid_width::Int
     grid_height::Int
     _grid::Matrix
+    obj_data::ObjectData
     road_vlist
     ground_vlist
     drivable_tiles
@@ -146,8 +290,8 @@ function _get_tile(grid, i, j)
     #Returns nothing if the duckiebot is not in a tile.
     ##
     grid_width, grid_height = size(grid)
-    if all(1 .≤ i .≤ grid_width) && all(1 .≤ j .≤ grid_height)
-        return grid[((j .- 1) * sim._map._grid.grid_width .+ i)...]
+    if 1 ≤ i ≤ grid_width && 1 ≤ j ≤ grid_height
+        return grid[(j - 1) * grid_width + i]
     end
 
     return nothing
@@ -158,6 +302,7 @@ function Grid(map_data::Dict, domain_rand)
         msg = "Must now include explicit tile_size in the map data."
         throw(KeyError(msg))
     end
+
     road_tile_size = map_data["tile_size"]
 
     #TODO
@@ -170,7 +315,7 @@ function Grid(map_data::Dict, domain_rand)
     # Create the grid
     grid_height = length(tiles)
     grid_width = length(tiles[1])
-    _grid = repeat([nothing;], inner=(sim._map._grid.grid_width,1), outer=(1,sim._map._grid.grid_height))
+    _grid = Matrix{Union{Missing, Dict{String,Any}}}(missing, grid_width, grid_height)
 
     # We keep a separate list of drivable tiles
     drivable_tiles = []
@@ -189,10 +334,10 @@ function Grid(map_data::Dict, domain_rand)
             tile == "empty" && continue
 
             if '/' ∈ tile
-                kind, orient = split(tile, "/")
-                kind = strip(kind, " ")
-                orient = strip(orient, " ")
-                angle = getindex(['S', 'E', 'N', 'W'], orient)
+                kind, orient = split(tile, '/')
+                kind = strip(kind, ' ')
+                orient = strip(orient, ' ')
+                angle = findfirst(isequal(orient), ["S", "E", "N", "W"])
                 drivable = true
             elseif '4' ∈ tile
                 kind = "4way"
@@ -206,15 +351,15 @@ function Grid(map_data::Dict, domain_rand)
 
             tile = Dict([
                 "coords"=> (i, j),
-                "kind"=> kind,
+                "kind"=> kind * "",
                 "angle"=> angle,
                 "drivable"=> drivable
             ])
 
-            _set_tile!(grid, i, j, tile)
+            _set_tile!(_grid, i, j, tile)
 
             if drivable
-                tile["curves"] = _get_curve(sim, i, j)
+                tile["curves"] = _get_curve(_grid, i, j, road_tile_size)
                 push!(drivable_tiles, tile)
             end
         end
@@ -225,12 +370,12 @@ function Grid(map_data::Dict, domain_rand)
 
     # Get the starting tile from the map, if specified
     start_tile = nothing
-    if "start_tile" ∈ map_data
+    if "start_tile" ∈ keys(map_data)
         coords = map_data["start_tile"]
         start_tile = _get_tile(_grid, coords...)
     end
 
-    Grid(road_tile_size, grid_width, grid_height, _grid, road_vlist,
+    Grid(road_tile_size, grid_width, grid_height, _grid, obj_data, road_vlist,
          ground_vlist, drivable_tiles, mesh, start_tile)
 end
 

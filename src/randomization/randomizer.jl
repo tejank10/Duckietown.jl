@@ -4,12 +4,14 @@ using JSON
 mutable struct Randomizer
     randomization_config::Dict
     default_config::Dict
-    keys::Set
+    key_s::Set
 end
 
 function Randomizer(randomization_config_fp="default_dr.json", default_config_fp="default.json")
+    randomization_config, default_config = nothing, nothing
+
     try
-        open(get_file_path("randomization/config", randomization_config_fp, "json"), 'r') do f
+        open(get_file_path("src/randomization/config", randomization_config_fp, "json"), "r") do f
             randomization_config = json.load(f)
         end
     catch
@@ -17,13 +19,13 @@ function Randomizer(randomization_config_fp="default_dr.json", default_config_fp
         randomization_config = Dict()
     end
 
-    open(get_file_path("randomization/config", default_config_fp, "json"), 'r') do f
+    open(get_file_path("src/randomization/config", default_config_fp, "json"), "r") do f
         default_config = JSON.parse(f)
     end
 
-    keys = Set(collect.(keys.([randomization_config, default_config])...))
+    key_s = Set(append!(collect.(keys.((randomization_config, default_config)))...))
 
-    Randomizer(randomization_config, default_config, keys)
+    Randomizer(randomization_config, default_config, key_s)
 end
 
 function randomize(randomizer::Randomizer)
@@ -32,9 +34,9 @@ function randomize(randomizer::Randomizer)
     ##
     randomization_settings = Dict()
 
-    for k in keys(randomizer)
+    for k in randomizer.key_s
         setting = nothing
-        if k in randomizer.randomization_config
+        if k in keys(randomizer.randomization_config)
             randomization_definition = randomizer.randomization_config[k]
 
             if randomization_definition["type"] == "int"

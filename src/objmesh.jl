@@ -1,6 +1,8 @@
 module ObjMesh
 
-cache= Dict()
+include("utils.jl")
+
+cache = Dict()
 
 mutable struct ObjectMesh
     ##
@@ -34,7 +36,7 @@ function ObjectMesh(file_path::String)
 
     # Attempt to load the materials library
     materials = _load_mtl(file_path)
-    mesh_file = open(file_path, 'r')
+    mesh_file = open(file_path, "r")
 
     verts = []
     texs = []
@@ -45,8 +47,8 @@ function ObjectMesh(file_path::String)
 
 
     # For each line of the input file
-    for line in mesh_file
-        line = rstrip(line, " \r\n")
+    for line in eachline(mesh_file)
+        line = rstrip(line, [' ', '\r', '\n'])
 
         # Skip comments
         (startswith(line, '#') || line == "") && continue
@@ -59,7 +61,7 @@ function ObjectMesh(file_path::String)
         tokens = tokens[2:end]
 
         if prefix == "v"
-            vert = map(v->float(v), tokens)
+            vert = map(v->parse(Float32, v), tokens)
             push!(verts, vert)
         end
 
@@ -69,13 +71,13 @@ function ObjectMesh(file_path::String)
         end
 
         if prefix == "vn"
-            normal = map(v -> float(v), tokens)
+            normal = map(v -> parse(Float32, v), tokens)
             push!(normals, normal)
         end
 
         if prefix == "usemtl"
             mtl_name = tokens[1]
-            if mtl_name in materials
+            if mtl_name in keys(materials)
                 cur_mtl = mtl_name
             else
                 cur_mtl = ""
@@ -88,7 +90,7 @@ function ObjectMesh(file_path::String)
             face = []
             for token in tokens
                 indices = filter(t -> t != "", split(token, '/'))
-                indices = map(Int, indices)
+                indices = map(i -> parse(Int, i), indices)
                 @assert length(indices) == 2 || length(indices) == 3
                 push!(face, indices)
             end
@@ -137,7 +139,7 @@ function ObjectMesh(file_path::String)
 
         # Get the color for this face
         f_mtl = materials[mtl_name]
-        f_color = f_mtl ? f_mtl["Kd"] : [1,1,1]
+        f_color = !isempty(f_mtl) ? f_mtl["Kd"] : [1,1,1]
 
         # For each tuple of indices
         for (l_idx, indices) in enumerate(face)
@@ -164,19 +166,19 @@ function ObjectMesh(file_path::String)
 
     # Re-center the object so that the base is at y=0
     # and the object is centered in x and z
-    min_coords = minimum(minimum(list_verts, dims=3)[1, :, :], dims=2)[1, :]
-    max_coords = minimum(maximum(list_verts, dims=3)[1, :, :], dims=2)[1, :]
+    min_coords = minimum(minimum(list_verts, dims=1)[1, :, :], dims=1)[1, :]
+    max_coords = minimum(maximum(list_verts, dims=1)[1, :, :], dims=1)[1, :]
     mean_coords = (min_coords + max_coords) / 2
     min_y = min_coords[2]
     mean_x = mean_coords[1]
     mean_z = mean_coords[3]
-    list_verts[:, :, 2] .-= min_y
-    list_verts[:, :, 1] .-= mean_x
-    list_verts[:, :, 3] .-= mean_z
+    list_verts .-= min_y
+    list_verts .-= mean_x
+    list_verts .-= mean_z
 
     # Recompute the object extents after centering
-    min_coords = minimum(minimum(list_verts, dims=3)[:, :, 1], dims=2)[:, 1]
-    max_coords = maximum(maximum(list_verts, dims=3)[:, :, 1], dims=2)[:, 1]
+    min_coords = minimum(minimum(list_verts, dims=1)[1, :, :], dims=1)[1, :]
+    max_coords = maximum(maximum(list_verts, dims=1)[1, :, :], dims=1)[1, :]
 
     # Vertex lists, one per chunk
     vlists = []
@@ -191,20 +193,19 @@ function ObjectMesh(file_path::String)
         num_faces_chunk = end_idx - start_idx
 
         # Create a vertex list to be used for rendering
-        vlist = pyglet.graphics.vertex_list(
+
+        #TODO
+        vlist = []#= pyglet.graphics.vertex_list(
             3num_faces_chunk,
             ("v3f", reshape(list_verts[start_idx:end_idx, :, :], :)),
             ("t2f", reshape(list_texcs[start_idx:end_idx, :, :], :)),
             ("n3f", reshape(list_norms[start_idx:end_idx, :, :], :)),
             ("c3f", reshape(list_color[start_idx:end_idx, :, :], :))
-        )
+        )=#
 
         mtl = chunk["mtl"]
-        if "map_Kd" in mtl
-            texture = load_texture(mtl["map_Kd"])
-        else
-            texture = nothing
-        end
+
+        texture = "map_Kd" ∈ keys(mtl) ? load_texture(mtl["map_Kd"]) : nothing
 
         push!(vlists, vlist)
         push!(textures, texture)
@@ -219,9 +220,9 @@ function get(mesh_name::String)
     ##
 
     # Assemble the absolute path to the mesh file
-    file_path = get_file_path("meshes", mesh_name, "obj")
+    file_path = get_file_path("src/meshes", mesh_name, "obj")
 
-    file_path ∈ cache && (return cache[file_path])
+    file_path ∈ keys(cache) && (return cache[file_path])
 
     mesh = ObjectMesh(file_path)
     cache[file_path] = mesh
@@ -231,7 +232,7 @@ end
 
 
 function _load_mtl(model_file::String)
-    model_dir, file_name = split(model_file)
+    model_dir, file_name = splitdir(model_file) .* ""
 
     # Create a default material for the model
     default_mtl = Dict([
@@ -239,7 +240,7 @@ function _load_mtl(model_file::String)
     ])
 
     # Determine the default texture path for the default material
-    tex_name = split(file_name, '.')[1]
+    tex_name = split(file_name, '.')[1] * ""
     tex_path = get_file_path("textures", tex_name, "png")
     if isdir(tex_path)
         default_mtl["map_Kd"] = tex_path

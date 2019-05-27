@@ -1,41 +1,42 @@
 module Graphics
 # List of textures available for a given path
 
+using LinearAlgebra
+
+include("utils.jl")
+
 tex_paths = Dict()
 
 # Cache of textures
 tex_cache = Dict()
 
-mutable struct Texture
-    tex
-end
-
 function get(tex_name::String, rng=nothing)
     ##
     #Manage the caching of textures, and texture randomization
     ##
-    paths = get(tex_paths, tex_name, [])
+    paths = Base.get(tex_paths, tex_name, [])
 
     # Get an inventory of the existing texture files
     if length(paths) == 0
         for i in 1:9
-            path = get_file_path("textures", tex_name * "_$i", "png")
-            !isdir(path) && break
+            path = get_file_path("src/textures", tex_name * "_$i", "png")
+            !ispath(path) && break
             push!(paths, path)
         end
     end
 
     @assert length(paths) > 0 "failed to load textures for name " * tex_name
 
-    if !isa(rng, nothing)
-        path_idx = rand(rng, 1, length(paths))
+    if !isa(rng, Nothing)
+        path_idx = rand(rng, 1:length(paths))
         path = paths[path_idx]
     else
         path = paths[1]
     end
 
-    if path ∉ tex_cache
-        tex_cache[path] = Texture(load_texture(path))
+    if path ∉ keys(tex_cache)
+        #TODO
+        tex_cache[path] = []#Texture(load_texture(path))
     end
 
     return tex_cache[path]
@@ -212,9 +213,9 @@ function gen_rot_matrix(axis, θ)
     b, c, d = -axis * sin(θ/2)
 
     return [
-        a^2+b^2-c^2-d^2  2(b*c-a*d) 2(b*d+a*c);
-        2(b*c+a*d) a^2+c^2-b^2-d^2 2(c*d-a*b);
-        2(b*d-a*c) 2(c*d+a*b) a^2+d^2-b^2-c^2]
+            a^2+b^2-c^2-d^2  2(b*c-a*d)      2(b*d+a*c);
+            2(b*c+a*d)       a^2+c^2-b^2-d^2 2(c*d-a*b);
+            2(b*d-a*c)       2(c*d+a*b)      a^2+d^2-b^2-c^2]
 end
 
 
@@ -242,8 +243,7 @@ function bezier_tangent(cps, t)
     p += 6(1-t) * t * (cps[3,:] - cps[2,:])
     p += 3(t^2) * (cps[4,:] - cps[3,:])
 
-    norm = norm(p)
-    p ./= norm
+    p ./= norm(p)
 
     return p
 end
@@ -283,4 +283,7 @@ function bezier_draw(cps, n = 20, red=false)
     gl.glColor3f(1,1,1)
 end
 =#
+
+export Texture, gen_rot_matrix, rotate_point,
+       bezier_closest, bezier_point, bezier_tangent
 end #module

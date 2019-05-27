@@ -7,13 +7,17 @@ using Distributions
 using Random
 
 include("utils.jl")
+
 include("graphics.jl")
+using .Graphics
+
 include("collision.jl")
 include("objects.jl")
 include("objmesh.jl")
 include("map.jl")
 include("randomization/randomizer.jl")
 include("simulator.jl")
+
 
 export Simulator
 

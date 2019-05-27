@@ -1,5 +1,3 @@
-# coding=utf-8
-
 add_axis(x) = reshape(x, size(x)..., 1)
 
 function get_subdir_path(sub_dir::String)
