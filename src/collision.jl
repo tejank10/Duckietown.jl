@@ -1,17 +1,16 @@
-
 using LinearAlgebra
 using Statistics
 
 function agent_boundbox(true_pos, width, length, f_vec, r_vec)
-    """
-    Compute bounding box for agent using its dimensions,
-    current position, and angle of rotation
-    Order of points in bounding box:
-    (front)
-    4 - 3
-    |   |
-    1 - 2
-    """
+    ##
+    #Compute bounding box for agent using its dimensions,
+    #current position, and angle of rotation
+    #Order of points in bounding box:
+    #(front)
+    #4 - 3
+    #|   |
+    #1 - 2
+    ##
 
     # halfwidth/length
     hwidth = width / 2
@@ -26,18 +25,21 @@ function agent_boundbox(true_pos, width, length, f_vec, r_vec)
     )[[1, 3], :]
 end
 
-function tensor_sat_test(norm, corners)
+function tensor_sat_test(norm::Vector{Matrix{T}}, corners::Vector{Matrix{T}}) where T
     ##
     #Separating Axis Theorem (SAT) extended to >2D.
-    #Requires that both the inputs are stacked on axis 0.
-    #(each input ~ "a list of 2D matrices" = 3D Tensor)
+    #(each input ~ "a list of 2D matrices")
     ##
-    dotval = norm * corners
-    mins = minimum(dotval, dims=2)
-    maxs = maximum(dotval, dims=2)
+    dotval = norm .* corners
+    mins = minimum.(dotval, dims=2)
+    maxs = maximum.(dotval, dims=2)
 
     return mins, maxs
 end
+
+tensor_sat_test(norm::Matrix{T}, corners::Matrix{T}) where T = tensor_sat_test([norm], [corners])
+tensor_sat_test(norm::Matrix{T}, corners::Vector{Matrix{T}}) where T = tensor_sat_test([norm], corners)
+tensor_sat_test(norm::Vector{Matrix{T}}, corners::Matrix{T}) where T = tensor_sat_test(norm, [corners])
 
 function overlaps(min1, max1, min2, max2)
     ##
@@ -50,7 +52,7 @@ function is_between_ordered(val, lowerbound, upperbound)
     ##
     #Helper function to check projection intervals (SAT)
     ##
-    return lowerbound ≤ val && val ≤ upperbound
+    return all(lowerbound .≤ val .≤ upperbound)
 end
 
 function generate_corners(pos, min_coords, max_coords, θ, scale)
@@ -59,12 +61,12 @@ function generate_corners(pos, min_coords, max_coords, θ, scale)
     ##
     px = pos[1]
     pz = pos[end]
-    return [
+    return permutedims(hcat(
         rotate_point(min_coords[1] * scale + px, min_coords[end] * scale + pz, px, pz, θ),
         rotate_point(max_coords[1] * scale + px, min_coords[end] * scale + pz, px, pz, θ),
         rotate_point(max_coords[1] * scale + px, max_coords[end] * scale + pz, px, pz, θ),
         rotate_point(min_coords[1] * scale + px, max_coords[end] * scale + pz, px, pz, θ)
-    ]
+    ))
 end
 
 
@@ -89,7 +91,7 @@ function generate_norm(corners)
     #Generates both (orthogonal, 1 per axis) normal vectors
     #for rectangle given vertices *in a particular order* (see generate_corners)
     ##
-    ca = cov(corners, false)
+    ca = cov(corners, corrected=false)
     vect = eigen(ca).vectors
     return permutedims(vect)
 end
@@ -115,11 +117,11 @@ function find_candidate_tiles(obj_corners, tile_size)
     xr = collect(minx:maxx)
     yr = collect(miny:maxy)
 
-    possible_tiles = [(x, y) for x in xr for y in yr]
+    possible_tiles = [(x+1, y+1) for x in xr for y in yr]
     return possible_tiles
 end
 
-function intersects(duckie, objs_stacked, duckie_norm, norms_stacked)
+function intersects(duckie::Matrix{T}, objs_stacked, duckie_norm::Matrix{T}, norms_stacked) where T
     ##
     #Helper function for Tensor-based OBB intersection.
     #Variable naming: SAT requires checking of the projection of all normals
@@ -133,7 +135,7 @@ function intersects(duckie, objs_stacked, duckie_norm, norms_stacked)
     objobj_min, objobj_max = tensor_sat_test(norms_stacked, objs_stacked)
 
     # Iterate through each object we are checking against
-    for idx in 1:size(objduck_min)[1]
+    for idx in 1:length(objduck_min)
         # If any interval doesn't overlap, immediately know objects don't intersect
         if !overlaps(
                 duckduck_min[1], duckduck_max[1], objduck_min[idx][1], objduck_max[idx][1])
@@ -221,16 +223,16 @@ function calculate_safety_radius(mesh, scale)
     #Returns a safety radius for an object, and scales
     #it according to the YAML file's scale param for that obj
     ##
-    x, _, z = maximum([abs.(mesh.min_coords), abs.(mesh.max_coords)], dims=1)
+    x, _, z = maximum(abs.([mesh.min_coords mesh.max_coords]), dims=2)
     return norm([x, z]) * scale
 end
 
-function heading_vec(angle)
+function heading_vec(θ)
     ##
     #Vector pointing in the direction the agent is looking
     ##
 
-    x = math.cos(angle)
-    z = -math.sin(angle)
-    return np.array([x, 0, z])
+    x = cos(θ)
+    z = -sin(θ)
+    return [x, 0, z]
 end

@@ -7,7 +7,7 @@ struct ObjectData
     collidable_safety_radii
 end
 
-function ObjectData(map_data::Dict, road_tile_size, domain_rand)
+function ObjectData(map_data::Dict, road_tile_size, domain_rand, grid)
     # Create the objects array
     objects = []
 
@@ -48,7 +48,7 @@ function ObjectData(map_data::Dict, road_tile_size, domain_rand)
         if "height" in keys(desc)
             scale = desc["height"] / mesh.max_coords[2]
         else
-            scale = desc["scale"]
+            sscale = desc["scale"]
         end
         @assert !("height" ∈ keys(desc) && "scale" ∈ keys(desc)) "cannot specify both height and scale"
 
@@ -90,11 +90,11 @@ function ObjectData(map_data::Dict, road_tile_size, domain_rand)
         # angle = rotate * (math.pi / 180)
 
         # Find drivable tiles object could intersect with
-        possible_tiles = find_candidate_tiles(obj_corners, road_tile_size)
+        possible_tiles = find_candidate_tiles(_obj_corners(obj), road_tile_size)
 
         # If the object intersects with a drivable tile
         if static && kind != "trafficlight" && _collidable_object(
-                grid, obj_corners, obj_norm, possible_tiles, road_tile_size)
+                grid, obj.obj_corners, obj.obj_norm, possible_tiles, road_tile_size)
             push!(collidable_centers, pos)
             push!(collidable_corners, permutedims(obj.obj_corners))
             push!(collidable_norms, obj.obj_norm)
@@ -122,7 +122,7 @@ end
 function _get_curve(grid, i, j, road_tile_size)
     ##
     #    Get the Bezier curve control points for a given tile
-    #
+    ##
     tile = _get_tile(grid, i, j)
     @assert !isa(tile, Nothing)
 
@@ -281,7 +281,7 @@ function _set_tile!(grid, i, j, tile)
     grid_width, grid_height = size(grid)
     @assert 1 ≤ i ≤ grid_width
     @assert 1 ≤ j ≤ grid_height
-    grid[(j - 1) * grid_width + i] = tile
+    grid[(j-1) * grid_width + i] = tile
 end
 
 
@@ -291,7 +291,7 @@ function _get_tile(grid, i, j)
     ##
     grid_width, grid_height = size(grid)
     if 1 ≤ i ≤ grid_width && 1 ≤ j ≤ grid_height
-        return grid[(j - 1) * grid_width + i]
+        return grid[(j-1) * grid_width + i]
     end
 
     return nothing
@@ -366,7 +366,7 @@ function Grid(map_data::Dict, domain_rand)
     end
     #TODO
     mesh = ObjMesh.get("duckiebot")
-    obj_data = ObjectData(map_data, road_tile_size, domain_rand)
+    obj_data = ObjectData(map_data, road_tile_size, domain_rand, _grid)
 
     # Get the starting tile from the map, if specified
     start_tile = nothing

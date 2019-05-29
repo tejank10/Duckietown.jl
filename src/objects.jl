@@ -1,4 +1,5 @@
 # coding=utf-8
+using Distributions: sample
 
 abstract type AbstractWorldObj end
 
@@ -8,12 +9,12 @@ mutable struct WorldObj <: AbstractWorldObj
     domain_rand
     angle
     y_rot
-    kind
-    mesh
     pos
     scale
     min_coords
     max_coords
+    kind
+    mesh
     optional
     static
     safety_radius
@@ -32,7 +33,9 @@ function WorldObj(obj, domain_rand, safety_radius_mult)
     color = (0, 0, 0)
     # maybe have an abstract method is_visible, get_color()
 
-    dict_vals, pos, scale, min_coords, max_coords, y_rot = process_obj_dict(obj, safety_radius_mult)
+    dict_vals = process_obj_dict(obj, safety_radius_mult)
+    pos, scale, min_coords, max_coords, y_rot = dict_vals[6:end]
+    dict_vals = dict_vals[1:5]
 
     angle = y_rot * (π / 180)
 
@@ -40,7 +43,7 @@ function WorldObj(obj, domain_rand, safety_radius_mult)
     obj_corners = generate_corners(pos, min_coords, max_coords, angle, scale)
     obj_norm = generate_norm(obj_corners)
 
-    WorldObj(visible, color, domain_rand, angle, y_rot,  pos,
+    WorldObj(visible, color, domain_rand, angle, y_rot, pos,
              scale, min_coords, max_coords, dict_vals...,
              obj_corners, obj_norm)
 end
@@ -291,6 +294,10 @@ mutable struct DuckieObj <: AbstractWorldObj
     pedestrian_wait_time
     vel
     heading
+    start
+    center
+    pedestrian_active
+    wiggle
 end
 
 function DuckieObj(obj, domain_rand::Bool, safety_radius_mult, walk_distance)
@@ -312,7 +319,7 @@ function DuckieObj(obj, domain_rand::Bool, safety_radius_mult, walk_distance)
     # Movement parameters
     heading = heading_vec(wobj.angle)
     start = copy(wobj.pos)
-    center = pos
+    center = wobj.pos
     pedestrian_active = false
 
     # Walk wiggle parameter
@@ -461,3 +468,32 @@ function is_green(tl_obj::TrafficLightObj, direction='N')
     end
     return false
 end
+
+_obj_corners(wobj::WorldObj) = wobj.obj_corners
+_obj_corners(obj::AbstractWorldObj) = _obj_corners(obj.wobj)
+
+function _set_color!(wobj::WorldObj, color)
+    wobj.color = color
+end
+
+_set_color!(obj::AbstractWorldObj, color) = _set_color!(obj.wobj, color)
+
+function _set_visible!(wobj::WorldObj, val::Bool)
+    wobj.visible = val
+end
+
+_set_visible!(obj::AbstractWorldObj, val::Bool) = _set_color!(obj.wobj, val)
+_visible(wobj::WorldObj) = wobj.visible
+_visible(obj::AbstractWorldObj) = _visible(obj.wobj)
+
+_optional(wobj::WorldObj) = wobj.optional
+_optional(obj::AbstractWorldObj) = _optional(obj.wobj)
+
+_pos(wobj::WorldObj) = wobj.pos
+_pos(obj::AbstractWorldObj) = _pos(obj.wobj)
+
+_max_coords(wobj::WorldObj) = wobj.max_coords
+_max_coords(obj::AbstractWorldObj) = _max_coords(obj.wobj)
+
+_scale(wobj::WorldObj) = wobj.scale
+_scale(obj::AbstractWorldObj) = _scale(obj.wobj)

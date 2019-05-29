@@ -66,7 +66,7 @@ function ObjectMesh(file_path::String)
         end
 
         if prefix == "vt"
-            tc = map(v -> float(v), tokens)
+            tc = map(v -> parse(Float32, v), tokens)
             push!(texs, tc)
         end
 
@@ -128,10 +128,10 @@ function ObjectMesh(file_path::String)
     # logger.debug('num chunks=%d' % len(chunks))
 
     # Create numpy arrays to store the vertex data
-    list_verts = zeros(Float32, num_faces, 3, 3)
-    list_norms = zeros(Float32, num_faces, 3, 3)
-    list_texcs = zeros(Float32, num_faces, 3, 2)
-    list_color = zeros(Float32, num_faces, 3, 3)
+    list_verts = zeros(Float32, 3, 3, num_faces)
+    list_norms = zeros(Float32, 3, 3, num_faces)
+    list_texcs = zeros(Float32, 3, 2, num_faces)
+    list_color = zeros(Float32, 3, 3, num_faces)
 
     # For each triangle
     for (f_idx, face) in enumerate(faces)
@@ -157,29 +157,32 @@ function ObjectMesh(file_path::String)
                 texc = [0, 0]
             end
 
-            list_verts[f_idx, l_idx, :] = vert
-            list_texcs[f_idx, l_idx, :] = texc
-            list_norms[f_idx, l_idx, :] = normal
-            list_color[f_idx, l_idx, :] = f_color
+            list_verts[l_idx, :, f_idx] .= vert
+            list_texcs[l_idx, :, f_idx] .= texc
+            list_norms[l_idx, :, f_idx] .= normal
+            list_color[l_idx, :, f_idx] .= f_color
         end
     end
 
     # Re-center the object so that the base is at y=0
     # and the object is centered in x and z
-    min_coords = minimum(minimum(list_verts, dims=1)[1, :, :], dims=1)[1, :]
-    max_coords = minimum(maximum(list_verts, dims=1)[1, :, :], dims=1)[1, :]
-    mean_coords = (min_coords + max_coords) / 2
+    min_coords = minimum(minimum(list_verts, dims=3)[:, :, 1], dims=1)[1, :]
+    max_coords = minimum(maximum(list_verts, dims=3)[:, :, 1], dims=1)[1, :]
+
+    mean_coords = (min_coords .+ max_coords) / 2f0
+    #NOTE: Why is mean coords correct but min coords has error margin of ~0.02?
+    #@show mean_coords
     min_y = min_coords[2]
     mean_x = mean_coords[1]
     mean_z = mean_coords[3]
-    list_verts .-= min_y
-    list_verts .-= mean_x
-    list_verts .-= mean_z
+    list_verts[:, 2, :] .= list_verts[:, 2, :] .- min_y
+    list_verts[:, 1, :] .= list_verts[:, 1, :] .- mean_x
+    list_verts[:, 3, :] .= list_verts[:, 3, :] .- mean_z
 
     # Recompute the object extents after centering
-    min_coords = minimum(minimum(list_verts, dims=1)[1, :, :], dims=1)[1, :]
-    max_coords = maximum(maximum(list_verts, dims=1)[1, :, :], dims=1)[1, :]
-
+    min_coords = minimum(minimum(list_verts, dims=3)[:, :, 1], dims=1)[1, :]
+    max_coords = minimum(maximum(list_verts, dims=3)[:, :, 1], dims=1)[1, :]
+    #@show min_coords, "mc"
     # Vertex lists, one per chunk
     vlists = []
 
@@ -197,10 +200,10 @@ function ObjectMesh(file_path::String)
         #TODO
         vlist = []#= pyglet.graphics.vertex_list(
             3num_faces_chunk,
-            ("v3f", reshape(list_verts[start_idx:end_idx, :, :], :)),
-            ("t2f", reshape(list_texcs[start_idx:end_idx, :, :], :)),
-            ("n3f", reshape(list_norms[start_idx:end_idx, :, :], :)),
-            ("c3f", reshape(list_color[start_idx:end_idx, :, :], :))
+            ("v3f", reshape(list_verts[:, :, start_idx:end_idx], :)),
+            ("t2f", reshape(list_texcs[:, :, start_idx:end_idx], :)),
+            ("n3f", reshape(list_norms[:, :, start_idx:end_idx], :)),
+            ("c3f", reshape(list_color[:, :, start_idx:end_idx], :))
         )=#
 
         mtl = chunk["mtl"]

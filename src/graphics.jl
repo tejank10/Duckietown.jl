@@ -200,7 +200,7 @@ function rotate_point(px, py, cx, cy, θ)
     new_dx = dx * cos(θ) + dy * sin(θ)
     new_dy = dy * cos(θ) - dx * sin(θ)
 
-    return cx + new_dx, cy + new_dy
+    return [cx + new_dx, cy + new_dy]
 end
 
 function gen_rot_matrix(axis, θ)

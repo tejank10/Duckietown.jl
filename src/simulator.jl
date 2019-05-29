@@ -559,13 +559,13 @@ function reset!(sim::Simulator)
     # Randomize object parameters
     for obj in sim._map._grid.obj_data.objects
         # Randomize the object color
-        obj.color = _perturb(sim, [1, 1, 1], 0.3)
+        _set_color!(obj, _perturb(sim, [1, 1, 1], 0.3))
 
         # Randomize whether the object is visible or not
-        if obj.optional && sim.domain_rand
-            obj.visible = rand(sim.rng, 0:1) == 0
+        if _optional(obj) && sim.domain_rand
+            _set_visible!(obj, rand(sim.rng, 0:1) == 0)
         else
-            obj.visible = true
+            _set_visible!(obj, true)
         end
     end
 
@@ -670,40 +670,32 @@ function _collidable_object(grid, obj_corners, obj_norm,
     ##
 
     size(possible_tiles) == (0,) && (return false)
-
     drivable_tiles = []
     for c in possible_tiles
-        tile = _get_tile.(grid, c[1:1], c[2:2])
-        if !isa(tile, Nothing) && tile["drivable"]
+        tile = _get_tile(grid, c[1], c[2])
+        @show tile
+        if !isa(tile, Missing) && tile["drivable"]
             push!(drivable_tiles, (c[1], c[2]))
         end
     end
     isempty(drivable_tiles) && (return false)
 
-
     # Tiles are axis aligned, so add normal vectors in bulk
-    tile_norms = repeat([1 0; 0 1],  length(drivable_tiles))
-
-    # None of the candidate tiles are drivable, don't add object
-    isempty(drivable_tiles) && (return false)
+    tile_norms = repeat([1 0; 0 1.],  length(drivable_tiles))
 
     # Find the corners for each candidate tile
     drivable_tiles = [permutedims(
         tile_corners(
-                _get_tile(grid, pt[1:1], pt[2:2])["coords"],
+                _get_tile(grid, pt[1], pt[2])["coords"],
                 road_tile_size
         )) for pt in drivable_tiles
     ]
 
     # Stack doesn't do anything if there's only one object,
     # So we add an extra dimension to avoid shape errors later
-    if length(tile_norms.shape) == 2
-        tile_norms = add_axis(tile_norms)
-    else  # Stack works as expected
-        drivable_tiles = vcat(drivable_tiles...)
-        tile_norms = vcat(tile_norms...)
+    if ndims(tile_norms) == 2
+        tile_norms = [tile_norms]
     end
-
     # Only add it if one of the vertices is on a drivable tile
     return intersects(obj_corners, drivable_tiles, obj_norm, tile_norms)
 end
@@ -788,10 +780,11 @@ function _inconvenient_spawn(sim::Simulator, pos)
     #Check that agent spawn is not too close to any object
     ##
 
-    results = [norm(x.pos .- pos) <
-               max(x.max_coords) * 0.5 * x.scale + MIN_SPAWN_OBJ_DIST
-               for x in sim._map._grid.obj_data.objects if x.visible
-               ]
+    cond(x) = norm(_pos(x) .- pos) <
+               maximum(_max_coords(x)) * 0.5 * _scale(x) + MIN_SPAWN_OBJ_DIST
+    arr = filter(x->_visible(x), sim._map._grid.obj_data.objects)
+    results = map(x->cond(x), arr)
+
     return any(results)
 end
 
