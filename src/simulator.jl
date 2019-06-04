@@ -1130,9 +1130,9 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
     elseif !top_down
         y += sim.cam_height
         trans_mat = rotate_mat(sim.cam_angle[1], (1, 0, 0))
-        trans_mat = rotate_mat(sim.cam_angle[2], (0, 1, 0)) * trans_mat
-        trans_mat = rotate_mat(sim.cam_angle[3], (0, 0, 1)) * trans_mat
-        trans_mat = translation_mat([0f0, 0f0, _perturb(sim, CAMERA_FORWARD_DIST)]) * trans_mat
+        trans_mat *= rotate_mat(sim.cam_angle[2], (0, 1, 0))
+        trans_mat *= rotate_mat(sim.cam_angle[3], (0, 0, 1))
+        trans_mat *= translation_mat([0f0, 0f0, _perturb(sim, CAMERA_FORWARD_DIST)])
     end
     #TODO: DO THIS!!
     cam = nothing
@@ -1186,11 +1186,11 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
             color = tile["color"]
             texture = tile["texture"]
 
-            pos = [(i + 0.5f0) * _road_tile_size(sim), 0f0,
-                   (j + 0.5f0) * _road_tile_size(sim)]
+            pos = [(i - 0.5f0) * _road_tile_size(sim), 0f0,
+                   (j - 0.5f0) * _road_tile_size(sim)]
             #gl.glPushMatrix()
             trans_mat = translation_mat(pos)
-            trans_mat = rotate_mat(angle * 90f0) * trans_mat
+            trans_mat *= rotate_mat(angle * 90f0)
 
             # Bind the appropriate texture
             #texture.bind()
@@ -1240,8 +1240,8 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
 
     if top_down
         trans_mat = translation_mat(sim.cur_pos...)
-        trans_mat = scale_mat(1f0) * trans_mat
-        trans_mat = rotate_mat(rad2deg(sim.cur_angle)) * trans_mat
+        trans_mat *= scale_mat(1f0)
+        trans_mat *= rotate_mat(rad2deg(sim.cur_angle))
         # glColor3f(*self.color)
         scene = vcat(scene, render(sim.mesh))
         #gl.glPopMatrix()
@@ -1298,6 +1298,7 @@ function render_obs(sim::Simulator)
             false
     )
 
+    println.(observation)
     # self.undistort - for UndistortWrapper
     #NOTE: Not distorting as of now
     #if sim.distortion && !sim.undistort
@@ -1312,7 +1313,7 @@ function render_obs(sim::Simulator)
         light_pos = Vec3(-40f0, 200f0, 100f0)
     end
 
-    light = PointLight(Vec3(1f0), 100f0, light_pos)
+    light = DistantLight(Vec3(1f0), 50f0, Vec3(0f0, -1f0, 0f0))#PointLight(Vec3(1f0), 1f0, light_pos)
     origin, direction = get_primary_rays(cam)
 
     color = raytrace(origin, direction, observation, light, origin, 0)

@@ -246,7 +246,7 @@ function _load_mtl(model_file::String)
 
     # Create a default material for the model
     default_mtl = Dict([
-        "Kd"=> PlainColor(Vec3(1f0))
+        "Kd"=> PlainColor(Vec3(0f0, 0f0, 1f0))
     ])
 
     # Determine the default texture path for the default material

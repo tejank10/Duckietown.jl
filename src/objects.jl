@@ -102,7 +102,7 @@ function triangulate_faces(list_verts::Matrix, color::Vec3)
     for i in 2:size(list_verts, 1)-1
         v2 = Vec3(list_verts[i, :]...)
         v3 = Vec3(list_verts[i+1, :]...)
-        push!(Δs, Triangle(v1, v2, v3; color=color))
+        push!(Δs, Triangle(v1, v2, v3; color=color, reflection=0f0))
     end
     return Δs
 end
@@ -132,7 +132,7 @@ translation_mat(pos...) = translation_mat(pos)
 function translation_mat(pos::Vector)
     @assert length(pos) == 3
     mat = Matrix{Float32}(I, 4, 4)
-    mat[1:3, 4] .= pos
+    mat[4, 1:3] .= pos
     return mat
 end
 
@@ -161,11 +161,10 @@ function rotate_mat(θ, axis=(0,1,0))
 end
 
 function transform_mat(mat::Matrix{T}, transformation_mat::Matrix{T}) where T
-    mat = permutedims(mat)
-    dim, numVecs = size(mat)
-    veclist = ones(eltype(mat), dim+1, numVecs)
-    veclist[1:dim, :] .= mat
-    permutedims(transformation_mat * veclist)[:, 1:dim]
+    numVecs, dim = size(mat)
+    veclist = ones(eltype(mat), numVecs, dim+1)
+    veclist[:, 1:dim] .= mat
+    return (veclist * transformation_mat)[:, 1:dim]
 end
 
 function tranform_mesh(mesh_mat::AbstractArray{T, 3}, transformation_mat::Matrix{T}) where T
@@ -178,16 +177,8 @@ function tranform_mesh(mesh_mat::AbstractArray{T, 3}, transformation_mat::Matrix
     return trans_vlist
 end
 
-function transform_mesh(obj_mesh::ObjectMesh, transformation_mat::Matrix)
-    trans_vlists = []
-
-    for vlist in obj_mesh.vlists
-        trans_vlist = transform_mesh(vlist, transformation_mat)
-        push!(trans_vlists, trans_vlist)
-    end
-
-    return trans_vlists
-end
+transform_mesh(obj_mesh::ObjectMesh, transformation_mat::Matrix) =
+[vlist->transform_mesh(vlist, transformation_mat) for vlist in vlists]
 
 # Below are the functions that need to
 # be reimplemented for any dynamic object
