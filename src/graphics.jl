@@ -42,6 +42,9 @@ function get(tex_name::String, rng=nothing)
     return tex_cache[path]
 end
 
+function load_texture(color)
+    PlainColor(color)
+end
 #=
 function bind(tex::Texture)
         from pyglet import gl
@@ -263,26 +266,25 @@ function bezier_closest(cps, p, t_bot=0, t_top=1, n=8)
 
     return bezier_closest(cps, p, mid, t_top, n-1)
 end
-#=
-function bezier_draw(cps, n = 20, red=false)
-    from pyglet import gl
-    pts = [bezier_point(cps, i/n) for i in -1:(n-2))]
-    gl.glBegin(gl.GL_LINE_STRIP)
+
+function bezier_draw(cps, n=20, red::Bool=false)
+    pts = [bezier_point(cps, i/n) for i in -1:(n-2)]
+    #gl.glBegin(gl.GL_LINE_STRIP)
 
     if red
-        gl.glColor3f(1, 0, 0)
+    #    gl.glColor3f(1, 0, 0)
     else
-        gl.glColor3f(0, 0, 1)
+    #    gl.glColor3f(0, 0, 1)
     end
 
     for (i, p) in enumerate(pts)
-        gl.glVertex3f(*p)
+    #    gl.glVertex3f(*p)
     end
 
-    gl.glEnd()
-    gl.glColor3f(1,1,1)
+    #gl.glEnd()
+    #gl.glColor3f(1,1,1)
 end
-=#
+
 
 export Texture, gen_rot_matrix, rotate_point,
        bezier_closest, bezier_point, bezier_tangent

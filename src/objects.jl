@@ -1,11 +1,11 @@
 # coding=utf-8
 using Distributions: sample
-
+using .ObjMesh
 abstract type AbstractWorldObj end
 
 mutable struct WorldObj <: AbstractWorldObj
     visible::Bool
-    color
+    color::Vec3
     domain_rand
     angle
     y_rot
@@ -30,14 +30,14 @@ function WorldObj(obj, domain_rand, safety_radius_mult)
     # (Static analysis complains)
     visible = true
     # same
-    color = (0, 0, 0)
+    color = Vec3(0f0)
     # maybe have an abstract method is_visible, get_color()
 
     dict_vals = process_obj_dict(obj, safety_radius_mult)
     pos, scale, min_coords, max_coords, y_rot = dict_vals[6:end]
     dict_vals = dict_vals[1:5]
 
-    angle = y_rot * (π / 180)
+    angle = deg2rad(y_rot)
 
     # Find corners and normal vectors assoc world object
     obj_corners = generate_corners(pos, min_coords, max_coords, angle, scale)
@@ -63,34 +63,132 @@ function process_obj_dict(obj, safety_radius_mult)
     return (kind, mesh, optional, static, safety_radius, pos, scale,
             min_coords, max_coords, y_rot)
 end
-#=
-    def render(self, draw_bbox):
-        """
-        Renders the object to screen
-        """
-        if not self.visible:
-            return
 
-        from pyglet import gl
+function render(obj::AbstractWorldObj, draw_bbox)
+    ##
+    #Renders the object to screen
+    ##
+    !_visible(obj) && return
 
-        # Draw the bounding box
-        if draw_bbox:
-            gl.glColor3f(1, 0, 0)
-            gl.glBegin(gl.GL_LINE_LOOP)
-            gl.glVertex3f(self.obj_corners.T[0, 0], 0.01, self.obj_corners.T[1, 0])
-            gl.glVertex3f(self.obj_corners.T[0, 1], 0.01, self.obj_corners.T[1, 1])
-            gl.glVertex3f(self.obj_corners.T[0, 2], 0.01, self.obj_corners.T[1, 2])
-            gl.glVertex3f(self.obj_corners.T[0, 3], 0.01, self.obj_corners.T[1, 3])
-            gl.glEnd()
+    # Draw the bounding box
+    if draw_bbox
+    #    gl.glColor3f(1, 0, 0)
+    #    gl.glBegin(gl.GL_LINE_LOOP)
+    #    gl.glVertex3f(self.obj_corners.T[0, 0], 0.01, self.obj_corners.T[1, 0])
+    #    gl.glVertex3f(self.obj_corners.T[0, 1], 0.01, self.obj_corners.T[1, 1])
+    #    gl.glVertex3f(self.obj_corners.T[0, 2], 0.01, self.obj_corners.T[1, 2])
+    #    gl.glVertex3f(self.obj_corners.T[0, 3], 0.01, self.obj_corners.T[1, 3])
+    #    gl.glEnd()
+    end
 
-        gl.glPushMatrix()
-        gl.glTranslatef(*self.pos)
-        gl.glScalef(self.scale, self.scale, self.scale)
-        gl.glRotatef(self.y_rot, 0, 1, 0)
-        gl.glColor3f(*self.color)
-        self.mesh.render()
-        gl.glPopMatrix()
-=#
+    #gl.glTranslatef(*self.pos)
+    #gl.glScalef(self.scale, self.scale, self.scale)
+    #gl.glRotatef(self.y_rot, 0, 1, 0)
+    #gl.glColor3f(*self.color)
+
+    transformation_mat = get_transformation_mat(_pos(obj), _scale(obj), _yrot(obj), (0,1,0))
+
+    tranformed_vlists = transform_mesh(obj.mesh, transformation_mat)
+    #let mesh store a matrix. make vec3 out of it colorcoloronly when you render
+    # Skipped texture for now
+    Δed_faces = triangulate_faces.(tranformed_vlists, obj_mesh.clists)
+    Δed_faces = vcat(Δed_faces...)
+    #return TriangleMesh(Δ_ed_faces)
+end
+
+function triangulate_faces(list_verts::Matrix, color::Vec3)
+    v1 = Vec3(list_verts[1, :]...)
+    Δs = []
+    for i in 2:size(list_verts, 1)-1
+        v2 = Vec3(list_verts[i, :]...)
+        v3 = Vec3(list_verts[i+1, :]...)
+        push!(Δs, Triangle(v1, v2, v3; color=color))
+    end
+    return Δs
+end
+
+function triangulate_faces(list_verts::AbstractArray{T, 3}, list_colors::Vector{Vec3}) where T
+    # list_verts: 3D array representing list of faces along 3rd dim.
+    # Every face has 3 vertices. Vertices are along 1st dim. X, Y and Z component
+    # of vertices, along 2nd dim.
+
+    @assert size(list_verts, 1) == 3
+    @assert size(list_verts, 3) ==  size(list_colors, 1)
+
+    num_faces = size(list_verts, 3)
+    vt = Vector{Triangle}()
+    for i in 1:num_faces
+        Δ = triangulate_faces(list_verts[:, :, i], list_colors[i])
+        vt = vcat(vt, Δ)
+    end
+    return vt
+end
+
+get_transformation_mat(pos::Vector, scale, θ, rot_axis) =
+    rotate_mat(θ) * scale_mat(scale) * translation_mat(pos)
+
+translation_mat(pos...) = translation_mat(pos)
+
+function translation_mat(pos::Vector)
+    @assert length(pos) == 3
+    mat = Matrix{Float32}(I, 4, 4)
+    mat[1:3, 4] .= pos
+    return mat
+end
+
+scale_mat(pos...) = scale_mat(pos)
+
+function scale_mat(scale)
+    mat = Matrix{Float32}(I, 4, 4)
+    mat[1:3, 1:3] .*= scale
+    return mat
+end
+
+function rotate_mat(θ, axis=(0,1,0))
+    # axis: one-hot vector, each element corresponds to x, y or z axis
+    θ = deg2rad(θ)
+    mat = Matrix{Float32}(I, 4, 4)
+    axis = argmax(axis)
+    if axis == 2
+        mat[1:2:3, 1:2:3] .= [cos(θ) -sin(θ); sin(θ) cos(θ)]
+    elseif axis == 1
+        mat[2:3, 2:3] .= [cos(θ) sin(θ); -sin(θ) cos(θ)]
+    else
+        mat[1:2, 1:2] .= [cos(θ) sin(θ); -sin(θ) cos(θ)]
+    end
+
+    return mat
+end
+
+function transform_mat(mat::Matrix{T}, transformation_mat::Matrix{T}) where T
+    mat = permutedims(mat)
+    dim, numVecs = size(mat)
+    veclist = ones(eltype(mat), dim+1, numVecs)
+    veclist[1:dim, :] .= mat
+    permutedims(transformation_mat * veclist)[:, 1:dim]
+end
+
+function tranform_mesh(mesh_mat::AbstractArray{T, 3}, transformation_mat::Matrix{T}) where T
+    trans_vlist = similar(mesh_mat)
+    num_faces = size(mesh_mat, 3)
+    for i in 1:num_faces
+        trans_vlist[:, :, i] .= transform_mat(vlist[:, :, i], transformation_mat)
+    end
+
+    return trans_vlist
+end
+
+function transform_mesh(obj_mesh::ObjectMesh, transformation_mat::Matrix)
+    trans_vlists = []
+
+    for vlist in obj_mesh.vlists
+        trans_vlist = transform_mesh(vlist, transformation_mat)
+        push!(trans_vlists, trans_vlist)
+    end
+
+    return trans_vlists
+end
+
 # Below are the functions that need to
 # be reimplemented for any dynamic object
 function check_collision(wobj::WorldObj, agent_corners, agent_norm)
@@ -277,7 +375,7 @@ function _update_pos(db_obj::DuckiebotObj, action, deltaTime)
 
     # Update the robot's direction angle
     db_obj.wobj.angle += rotAngle
-    db_obj.wobj.y_rot += rotAngle * 180 / π
+    db_obj.wobj.y_rot += rand2deg(rotAngle)
 
     # Recompute the bounding boxes (BB) for the duckiebot
     db_obj.wobj.obj_corners = agent_boundbox(
@@ -383,7 +481,7 @@ function step!(dobj::DuckieObj, delta_time)
 
     dobj.pos = dobj.center
     angle_delta = dobj.wiggle * sin(48dobj.time)
-    dobj.wobj.y_rot = (dobj.wobj.angle + angle_delta) * (180 / π)
+    dobj.wobj.y_rot = rad2deg(dobj.wobj.angle + angle_delta)
     dobj.wobj.obj_norm = generate_norm(dobj.obj_corners)
 end
 
@@ -420,8 +518,8 @@ function TrafficLightObj(obj, domain_rand, safety_radius_mult)
     wobj = WorldObj(obj, domain_rand, safety_radius_mult)
 
     texs = [
-        load_texture(get_file_path("textures", "trafficlight_card0", "jpg")),
-        load_texture(get_file_path("textures", "trafficlight_card1", "jpg"))
+        load_texture(get_file_path("src/textures", "trafficlight_card0", "jpg")),
+        load_texture(get_file_path("src/textures", "trafficlight_card1", "jpg"))
     ]
     time = 0
 
@@ -472,11 +570,11 @@ end
 _obj_corners(wobj::WorldObj) = wobj.obj_corners
 _obj_corners(obj::AbstractWorldObj) = _obj_corners(obj.wobj)
 
-function _set_color!(wobj::WorldObj, color)
+function _set_color!(wobj::WorldObj, color::Vec3)
     wobj.color = color
 end
 
-_set_color!(obj::AbstractWorldObj, color) = _set_color!(obj.wobj, color)
+_set_color!(obj::AbstractWorldObj, color::Vec3) = _set_color!(obj.wobj, color)
 
 function _set_visible!(wobj::WorldObj, val::Bool)
     wobj.visible = val
@@ -497,3 +595,6 @@ _max_coords(obj::AbstractWorldObj) = _max_coords(obj.wobj)
 
 _scale(wobj::WorldObj) = wobj.scale
 _scale(obj::AbstractWorldObj) = _scale(obj.wobj)
+
+_y_rot(wobj::WorldObj) = wobj.y_rot
+_y_rot(obj::AbstractWorldObj) = _y_rot(obj.wobj)

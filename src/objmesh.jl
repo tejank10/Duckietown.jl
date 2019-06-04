@@ -1,16 +1,20 @@
 module ObjMesh
 
 include("utils.jl")
+using RayTracer: Vec3, PlainColor
 
 cache = Dict()
+
+export ObjectMesh
 
 mutable struct ObjectMesh
     ##
     #Load and render OBJ model files
     ##
-    min_coords
-    max_coords
+    min_coords::Vector{Float32}
+    max_coords::Vector{Float32}
     vlists
+    clists
     textures
 end
 
@@ -109,7 +113,7 @@ function ObjectMesh(file_path::String)
         face, mtl_name = face
         if mtl_name != cur_mtl
             if length(chunks) > 0
-                chunks[end]["end_idx"] = idx
+                chunks[end]["end_idx"] = idx-1
             end
             push!(chunks, Dict([
                 "mtl"=>materials[mtl_name],
@@ -127,11 +131,11 @@ function ObjectMesh(file_path::String)
     # logger.debug('num faces=%d' % num_faces)
     # logger.debug('num chunks=%d' % len(chunks))
 
-    # Create numpy arrays to store the vertex data
+    # Create arrays to store the vertex data
     list_verts = zeros(Float32, 3, 3, num_faces)
     list_norms = zeros(Float32, 3, 3, num_faces)
     list_texcs = zeros(Float32, 3, 2, num_faces)
-    list_color = zeros(Float32, 3, 3, num_faces)
+    list_colors = Vector{PlainColor}()
 
     # For each triangle
     for (f_idx, face) in enumerate(faces)
@@ -139,7 +143,7 @@ function ObjectMesh(file_path::String)
 
         # Get the color for this face
         f_mtl = materials[mtl_name]
-        f_color = !isempty(f_mtl) ? f_mtl["Kd"] : [1,1,1]
+        f_color = !isempty(f_mtl) ? f_mtl["Kd"] : rgb(1f0)
 
         # For each tuple of indices
         for (l_idx, indices) in enumerate(face)
@@ -160,14 +164,14 @@ function ObjectMesh(file_path::String)
             list_verts[l_idx, :, f_idx] .= vert
             list_texcs[l_idx, :, f_idx] .= texc
             list_norms[l_idx, :, f_idx] .= normal
-            list_color[l_idx, :, f_idx] .= f_color
+            push!(list_colors, f_color)
         end
     end
 
     # Re-center the object so that the base is at y=0
     # and the object is centered in x and z
-    min_coords = minimum(minimum(list_verts, dims=3)[:, :, 1], dims=1)[1, :]
-    max_coords = minimum(maximum(list_verts, dims=3)[:, :, 1], dims=1)[1, :]
+    min_coords = minimum(minimum(list_verts, dims=3), dims=1)
+    max_coords = minimum(maximum(list_verts, dims=3), dims=1)
 
     mean_coords = (min_coords .+ max_coords) / 2f0
     #NOTE: Why is mean coords correct but min coords has error margin of ~0.02?
@@ -180,11 +184,14 @@ function ObjectMesh(file_path::String)
     list_verts[:, 3, :] .= list_verts[:, 3, :] .- mean_z
 
     # Recompute the object extents after centering
-    min_coords = minimum(minimum(list_verts, dims=3)[:, :, 1], dims=1)[1, :]
-    max_coords = minimum(maximum(list_verts, dims=3)[:, :, 1], dims=1)[1, :]
-    #@show min_coords, "mc"
-    # Vertex lists, one per chunk
+    min_coords = minimum(minimum(list_verts, dims=3), dims=1)[1, :, 1]
+    max_coords = minimum(maximum(list_verts, dims=3), dims=1)[1, :, 1]
+
+    # Vertex list, one per chunk
     vlists = []
+
+    # Color list
+    clists = []
 
     # Textures, one per chunk
     textures = []
@@ -193,28 +200,28 @@ function ObjectMesh(file_path::String)
     for chunk in chunks
         start_idx = chunk["start_idx"]
         end_idx = chunk["end_idx"]
-        num_faces_chunk = end_idx - start_idx
+        num_faces_chunk = end_idx - start_idx + 1
 
         # Create a vertex list to be used for rendering
 
         #TODO
-        vlist = []#= pyglet.graphics.vertex_list(
-            3num_faces_chunk,
-            ("v3f", reshape(list_verts[:, :, start_idx:end_idx], :)),
-            ("t2f", reshape(list_texcs[:, :, start_idx:end_idx], :)),
-            ("n3f", reshape(list_norms[:, :, start_idx:end_idx], :)),
-            ("c3f", reshape(list_color[:, :, start_idx:end_idx], :))
-        )=#
+        #vlist = pyglet.graphics.vertex_list(
+            #3num_faces_chunk,
+            #("v3f", reshape(list_verts[:, :, start_idx:end_idx], :)),
+            #("t2f", reshape(list_texcs[:, :, start_idx:end_idx], :)),
+            #("n3f", reshape(list_norms[:, :, start_idx:end_idx], :)),
+            #("c3f", reshape(list_color[:, :, start_idx:end_idx], :)))
 
         mtl = chunk["mtl"]
 
         texture = "map_Kd" ∈ keys(mtl) ? load_texture(mtl["map_Kd"]) : nothing
 
-        push!(vlists, vlist)
+        push!(vlists, list_verts[:, :, start_idx:end_idx])
+        push!(clists, list_colors[start_idx:end_idx])
         push!(textures, texture)
     end
 
-    ObjectMesh(min_coords, max_coords, vlists, textures)
+    ObjectMesh(min_coords, max_coords, vlists, clists, textures)
 end
 
 function get(mesh_name::String)
@@ -239,12 +246,12 @@ function _load_mtl(model_file::String)
 
     # Create a default material for the model
     default_mtl = Dict([
-        "Kd"=> [1, 1, 1]
+        "Kd"=> PlainColor(Vec3(1f0))
     ])
 
     # Determine the default texture path for the default material
     tex_name = split(file_name, '.')[1] * ""
-    tex_path = get_file_path("textures", tex_name, "png")
+    tex_path = get_file_path("src/textures", tex_name, "png")
     if isdir(tex_path)
         default_mtl["map_Kd"] = tex_path
     end
@@ -259,7 +266,7 @@ function _load_mtl(model_file::String)
 
     #logger.debug('loading materials from "%s"' % mtl_path)
 
-    mtl_file = open(mtl_path, 'r')
+    mtl_file = open(mtl_path, "r")
 
     cur_mtl = nothing
 
@@ -272,7 +279,7 @@ function _load_mtl(model_file::String)
 
         tokens = split(line, ' ')
         tokens = map(t -> strip(t, ' '), tokens)
-        tokens = collect(filters(t -> t != "", tokens))
+        tokens = collect(filter(t -> t != "", tokens))
 
         prefix = tokens[1]
         tokens = tokens[2:end]
@@ -284,7 +291,7 @@ function _load_mtl(model_file::String)
 
         # Diffuse color
         if prefix == "Kd"
-            vals = map(v -> float(v), tokens)
+            vals = map(v -> Float32(v), tokens)
             cur_mtl["Kd"] = vals
         end
 
@@ -302,21 +309,21 @@ function _load_mtl(model_file::String)
 end
 
 
-function render(obj_mesh::ObjectMesh) end
-#=
-def render(self):
-    from pyglet import gl
-    for idx, vlist in enumerate(self.vlists):
-        texture = self.textures[idx]
+function render(obj_mesh::ObjectMesh)
+    for (idx, vlist) in enumerate(obj_mesh.vlists)
+        texture = obj_mesh.textures[idx]
 
-        if texture:
-            gl.glEnable(gl.GL_TEXTURE_2D)
-            gl.glBindTexture(texture.target, texture.id)
-        else:
-            gl.glDisable(gl.GL_TEXTURE_2D)
+        if !isnothing(texture)
+            #gl.glEnable(gl.GL_TEXTURE_2D)
+            #gl.glBindTexture(texture.target, texture.id)
+        else
+            #gl.glDisable(gl.GL_TEXTURE_2D)
+        end
 
-        vlist.draw(gl.GL_TRIANGLES)
+        #vlist.draw(gl.GL_TRIANGLES)
+    end
 
-    gl.glDisable(gl.GL_TEXTURE_2D)
-=#
+    #gl.glDisable(gl.GL_TEXTURE_2D)
+end
+
 end #module

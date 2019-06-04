@@ -18,10 +18,10 @@ function agent_boundbox(true_pos, width, length, f_vec, r_vec)
 
     # Indexing to make sure we only get the x/z dims
     corners = hcat(
-        true_pos - hwidth * r_vec - hlength * f_vec,
-        true_pos + hwidth * r_vec - hlength * f_vec,
-        true_pos + hwidth * r_vec + hlength * f_vec,
-        true_pos - hwidth * r_vec + hlength * f_vec
+        true_pos .- hwidth .* r_vec .- hlength .* f_vec,
+        true_pos .+ hwidth .* r_vec .- hlength .* f_vec,
+        true_pos .+ hwidth .* r_vec .+ hlength .* f_vec,
+        true_pos .- hwidth .* r_vec .+ hlength .* f_vec
     )[[1, 3], :]
 end
 
