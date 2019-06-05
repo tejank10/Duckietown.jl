@@ -1,3 +1,5 @@
+using RayTracer: improcess
+
 struct DoneRewardInfo
     done::Bool
     done_why::String
@@ -1114,7 +1116,7 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
     # Note: we add a bit of noise to the camera position for data augmentation
     =#
     pos = sim.cur_pos
-    angle = 0f0#Float32(deg2rad(oo))#sim.cur_angle
+    angle = sim.cur_angle
     #logger.info('Pos: %s angle %s' % (self.cur_pos, self.cur_angle))
     if sim.domain_rand
         pos = pos .+ sim.randomization_settings["camera_noise"]
@@ -1314,12 +1316,15 @@ function render_obs(sim::Simulator)
     light = DistantLight(Vec3(1f0), 5000f0, Vec3(0f0, -1f0, 0f0))#PointLight(Vec3(1f0), 1000000f0, light_pos)
     origin, direction = get_primary_rays(cam)
 
-    color = raytrace(origin, direction, observation, light, origin, 2)
+    im = raytrace(origin, direction, observation, light, origin, 2)
 
-    img = get_image(color, sim.camera_width, sim.camera_height)
+    color_r = improcess(im.x, sim.camera_width, sim.camera_height)
+    color_g = improcess(im.y, sim.camera_width, sim.camera_height)
+    color_b = improcess(im.z, sim.camera_width, sim.camera_height)
 
-    save("straight_road.jpg", img)
-    return observation
+    shape = (sim.camera_width, sim.camera_height, 3, 1)
+    im_arr = zeroonenorm(reshape(hcat(color_r, color_g, color_b), shape))
+    return im_arr
 end
 
 function render(sim::Simulator, mode="human", close=false)
