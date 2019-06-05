@@ -56,7 +56,7 @@ function distort(dist::Distorion, observation)
     #Distort observation using parameters in constructor
     ##
 
-    if isa(dist.mapx, Nothing)
+    if isnothing(dist.mapx)
         # Not initialized - initialize all the transformations we'll need
         dist.mapx = zeros(size(observation))
         dist.mapy = zeros(size(observation))
@@ -81,7 +81,7 @@ function _undistort(dist::Distortion, observation)
     ##
 
     # If mapx is None, then distort was never called
-    @assert !isa(dist.mapx, Nothing) "You cannot call undistort on a rectified image"
+    @assert !isnothing(dist.mapx) "You cannot call undistort on a rectified image"
 
     return cv2.remap(observation, self.mapx, self.mapy, cv2.INTER_NEAREST)
 end

@@ -360,7 +360,7 @@ _objects(grid::Grid) = grid.obj_data.objects
 _objects(map::Map) = _objects(map._grid)
 _objects(sim::Simulator) = _objects(sim._map)
 
-_grid(map::Map) = map._grid._grid
+_grid(map::Map) = map._grid
 _grid(sim::Simulator) = _grid(sim._map)
 
 _drivable_tiles(map::Map) = map._grid.drivable_tiles
@@ -422,22 +422,22 @@ function get_lane_pos2(sim::Simulator, pos, angle)
     # Get the closest point along the right lane's Bezier curve,
     # and the tangent at that point
     point, tangent = closest_curve_point(sim, pos, angle)
-    if isa(point, Nothing)
+    if isnothing(point)
         msg = "Point not in lane: $pos"
         throw(NotInLane(msg))
     end
 
-    @assert !isa(point, Nothing)
+    @assert !isnothing(point)
 
     # Compute the alignment of the agent direction with the curve tangent
     dirVec = get_dir_vec(angle)
     dotDir = dot(dirVec, tangent)
-    dotDir = max(-1, min(1, dotDir))
+    dotDir = max(-1f0, min(1f0, dotDir))
 
     # Compute the signed distance to the curve
     # Right of the curve is negative, left is positive
     posVec = pos .- point
-    upVec = [0, 1, 0]
+    upVec = [0f0, 1f0, 0f0]
     rightVec = cross(tangent, upVec)
     signedDist = dot(posVec, rightVec)
 
@@ -446,7 +446,7 @@ function get_lane_pos2(sim::Simulator, pos, angle)
     angle_rad = acos(dotDir)
 
     if dot(dirVec, rightVec) < 0
-        angle_rad *= -1
+        angle_rad *= -1f0
     end
 
     angle_deg = rad2deg(angle_rad)
@@ -462,8 +462,8 @@ function _drivable_pos(grid::Grid, pos)
     ##
 
     coords = get_grid_coords(grid.road_tile_size, pos)
-    tile = _get_tile(grid._grid, coords...)
-    if isa(tile, Nothing)
+    tile = _get_tile(grid, coords...)
+    if isnothing(tile)
         msg = "No tile found at $pos $coords"
         #logger.debug(msg)
         return false
@@ -576,7 +576,7 @@ function reset!(sim::Simulator)
     =#
     # Randomize tile parameters
     #TODO: fix all rands
-    for tile in _grid(sim)
+    for tile in _grid(sim)._grid
         rng = sim.domain_rand ? sim.rng : nothing
         # Randomize the tile texture
         tile["texture"] = Graphics.get(tile["kind"], rng)
@@ -599,11 +599,11 @@ function reset!(sim::Simulator)
     end
 
     # If the map specifies a starting tile
-    if !isa(sim.user_tile_start, Nothing)
+    if !isnothing(sim.user_tile_start)
         #logger.info('using user tile start: %s' % self.user_tile_start)
         i, j = sim.user_tile_start
         tile = _get_tile(_grid(sim), i, j)
-        if isa(tile, Nothing)
+        if isnothing(tile)
             msg = "The tile specified does not exist."
             throw(error(msg))
         end
@@ -626,8 +626,8 @@ function reset!(sim::Simulator)
         i, j = tile["coords"]
 
         # Choose a random position on this tile
-        x = rand(sim.rng, Uniform(i, i + 1)) * _road_tile_size(sim)
-        z = rand(sim.rng, Uniform(j, j + 1)) * _road_tile_size(sim)
+        x = rand(sim.rng, Uniform(i-1, i)) * _road_tile_size(sim)
+        z = rand(sim.rng, Uniform(j-1, j)) * _road_tile_size(sim)
         propose_pos = Float32.([x, 0f0, z])
 
         # Choose a random direction
@@ -701,7 +701,7 @@ function _perturb(sim::Simulator, val, scale=0.1f0)
     return val .* noise
 end
 
-function _collidable_object(grid, obj_corners, obj_norm,
+function _collidable_object(grid, grid_width, grid_height, obj_corners, obj_norm,
                             possible_tiles, road_tile_size)
     ##
     #A function to check if an object intersects with any
@@ -712,9 +712,9 @@ function _collidable_object(grid, obj_corners, obj_norm,
     size(possible_tiles) == (0,) && (return false)
     drivable_tiles = []
     for c in possible_tiles
-        tile = _get_tile(grid, c[1], c[2])
-        if !isa(tile, Missing) && tile["drivable"]
-            push!(drivable_tiles, (c[1], c[2]))
+        tile = _get_tile(grid, c..., grid_width, grid_height)
+        if !ismissing(tile) && tile["drivable"]
+            push!(drivable_tiles, (c...))
         end
     end
     isempty(drivable_tiles) && (return false)
@@ -725,7 +725,7 @@ function _collidable_object(grid, obj_corners, obj_norm,
     # Find the corners for each candidate tile
     drivable_tiles = [permutedims(
         tile_corners(
-                _get_tile(grid, pt[1], pt[2])["coords"],
+                _get_tile(grid, pt..., grid_width, grid_height)["coords"],
                 road_tile_size
         )) for pt in drivable_tiles
     ]
@@ -820,7 +820,7 @@ function _inconvenient_spawn(sim::Simulator, pos)
     ##
 
     cond(x) = norm(_pos(x) .- pos) <
-               maximum(_max_coords(x)) * 0.5 * _scale(x) + MIN_SPAWN_OBJ_DIST
+               maximum(_max_coords(x)) * 0.5f0 * _scale(x) + MIN_SPAWN_OBJ_DIST
     arr = filter(x->_visible(x), _objects(sim))
     results = map(x->cond(x), arr)
 
@@ -928,7 +928,7 @@ function update_physics(sim::Simulator, action, delta_time)
             obj_i, obj_j = get_grid_coords(_road_tile_size(sim), obj.pos)
             same_tile_obj = [
                 o for o in _objects(sim) if
-                tuple(get_grid_coords(_road_tile_size(sim), o.pos)...,) == (obj_i, obj_j) && o != obj
+                get_grid_coords(_road_tile_size(sim), o.pos) == (obj_i, obj_j) && o != obj
             ]
 
             step!(obj, delta_time, sim.closest_curve_point, same_tile_obj)
@@ -1114,7 +1114,7 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
     # Note: we add a bit of noise to the camera position for data augmentation
     =#
     pos = sim.cur_pos
-    angle = sim.cur_angle
+    angle = 0f0#Float32(deg2rad(oo))#sim.cur_angle
     #logger.info('Pos: %s angle %s' % (self.cur_pos, self.cur_angle))
     if sim.domain_rand
         pos = pos .+ sim.randomization_settings["camera_noise"]
@@ -1128,29 +1128,29 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
         y += 0.8f0
         trans_mat = rotate_mat(90f0, 1, 0, 0)
     elseif !top_down
-        y += sim.cam_height
+        y -= sim.cam_height
         trans_mat = rotate_mat(sim.cam_angle[1], (1, 0, 0))
-        trans_mat *= rotate_mat(sim.cam_angle[2], (0, 1, 0))
-        trans_mat *= rotate_mat(sim.cam_angle[3], (0, 0, 1))
-        trans_mat *= translation_mat([0f0, 0f0, _perturb(sim, CAMERA_FORWARD_DIST)])
+        trans_mat = rotate_mat(sim.cam_angle[2], (0, 1, 0)) * trans_mat
+        trans_mat = rotate_mat(sim.cam_angle[3], (0, 0, 1)) * trans_mat
+        trans_mat = translation_mat([0f0, 0f0, _perturb(sim, CAMERA_FORWARD_DIST)]) * trans_mat
     end
     #TODO: DO THIS!!
     cam = nothing
 
     if top_down
         x = (sim.grid_width * sim.road_tile_size) / 2f0
-        y - 5f0
+        y = 5f0
         z = (sim.grid_height * sim.road_tile_size) / 2f0
 
         eye = Vec3(x, y, z)
-        target  = Vec3(x, 5f0, z)
+        target = Vec3(x, 0f0, z)
         vup = Vec3(0f0, 0f0, -1f0)
-        cam = Camera(eye, target, vup, sim.cam_fov_y, 100f0, width, height)
+        cam = Camera(eye, target, vup, sim.cam_fov_y, 1f0, width, height)
     else
         eye = Vec3(x, y, z)
         target = Vec3(x+dx, y+dy, z+dz)
-        vup = Vec3(0f0, 1f0, 0f0)
-        cam = Camera(eye, target, vup, sim.cam_fov_y, 100f0, width, height)
+        vup = Vec3(0f0, -1f0, 0f0)
+        cam = Camera(eye, target, vup, sim.cam_fov_y, 1f0, width, height)
     end
 
 
@@ -1186,11 +1186,10 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
             color = tile["color"]
             texture = tile["texture"]
 
-            pos = [(i - 0.5f0) * _road_tile_size(sim), 0f0,
-                   (j - 0.5f0) * _road_tile_size(sim)]
+            pos = [(i-0.5f0), 0f0, (j-0.5f0)] * _road_tile_size(sim)
             #gl.glPushMatrix()
             trans_mat = translation_mat(pos)
-            trans_mat *= rotate_mat(angle * 90f0)
+            trans_mat = rotate_mat(angle * 90f0) * trans_mat
 
             # Bind the appropriate texture
             #texture.bind()
@@ -1198,7 +1197,7 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
             road_vlist = transform_mat(road_vlist, trans_mat)
             scene = vcat(scene, triangulate_faces(road_vlist, color))
             #gl.glPopMatrix()
-            if sim.draw_curve && tile["drivable"]
+            if tile["drivable"] && sim.draw_curve
                 # Find curve with largest dotproduct with heading
                 curves = _get_tile(_grid(sim), i, j)["curves"]
                 curve_headings = curves[end, :, :] .- curves[1, :, :]
@@ -1298,7 +1297,6 @@ function render_obs(sim::Simulator)
             false
     )
 
-    println.(observation)
     # self.undistort - for UndistortWrapper
     #NOTE: Not distorting as of now
     #if sim.distortion && !sim.undistort
@@ -1313,10 +1311,10 @@ function render_obs(sim::Simulator)
         light_pos = Vec3(-40f0, 200f0, 100f0)
     end
 
-    light = DistantLight(Vec3(1f0), 50f0, Vec3(0f0, -1f0, 0f0))#PointLight(Vec3(1f0), 1f0, light_pos)
+    light = DistantLight(Vec3(1f0), 5000f0, Vec3(0f0, -1f0, 0f0))#PointLight(Vec3(1f0), 1000000f0, light_pos)
     origin, direction = get_primary_rays(cam)
 
-    color = raytrace(origin, direction, observation, light, origin, 0)
+    color = raytrace(origin, direction, observation, light, origin, 2)
 
     img = get_image(color, sim.camera_width, sim.camera_height)
 

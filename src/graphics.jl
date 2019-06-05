@@ -27,7 +27,7 @@ function get(tex_name::String, rng=nothing)
 
     @assert length(paths) > 0 "failed to load textures for name " * tex_name
 
-    if !isa(rng, Nothing)
+    if !isnothing(rng)
         path_idx = rand(rng, 1:length(paths))
         path = paths[path_idx]
     else

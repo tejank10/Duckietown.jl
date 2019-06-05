@@ -276,9 +276,9 @@ version = "0.6.0"
 
 [[ImageCore]]
 deps = ["ColorTypes", "Colors", "FFTW", "FixedPointNumbers", "Graphics", "MappedArrays", "OffsetArrays", "PaddedViews", "Reexport"]
-git-tree-sha1 = "653a098434f6d76fd42796e48c42f2c2c4bd451b"
+git-tree-sha1 = "2fb7a0d80ab6bf0c5a8b0a189bca60311c73a605"
 uuid = "a09fc81d-aa75-5fe9-8630-4744c3626534"
-version = "0.8.3"
+version = "0.8.4"
 
 [[ImageDistances]]
 deps = ["ColorVectorSpace", "Colors", "Distances", "FixedPointNumbers", "ImageCore"]
@@ -294,9 +294,9 @@ version = "0.6.3"
 
 [[ImageMetadata]]
 deps = ["AxisArrays", "ColorVectorSpace", "Colors", "FixedPointNumbers", "ImageAxes", "ImageCore", "IndirectArrays"]
-git-tree-sha1 = "631c3e1dc2b645ed3bdee14418f8bbfc38b9b7f0"
+git-tree-sha1 = "6522fdedc8aace8b8dc9f7adc7f6079bc51c86e2"
 uuid = "bc367c6b-8a6b-528e-b4bd-a4b897500b49"
-version = "0.7.0"
+version = "0.7.1"
 
 [[ImageMorphology]]
 deps = ["Colors", "FixedPointNumbers", "ImageCore"]
@@ -500,7 +500,7 @@ version = "0.3.1"
 
 [[RayTracer]]
 deps = ["Distributed", "Flux", "IRTools", "Images", "Zygote"]
-git-tree-sha1 = "47a06ed141e49814edda2142c9efa1866e296d8e"
+git-tree-sha1 = "ef15fda244f7b1ac6621cddd99ebd0fc7ecf827c"
 repo-rev = "ap/invrender"
 repo-url = "https://github.com/avik-pal/RayTracer.jl"
 uuid = "60dacb86-48ff-11e9-0f01-03ab8794bbc9"

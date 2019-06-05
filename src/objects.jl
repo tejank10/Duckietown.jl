@@ -97,12 +97,12 @@ function render(obj::AbstractWorldObj, draw_bbox)
 end
 
 function triangulate_faces(list_verts::Matrix, color::Vec3)
-    v1 = Vec3(list_verts[1, :]...)
+    v1 = Vec3(list_verts[1, 1], -list_verts[1, 2], list_verts[1, 3])
     Δs = []
     for i in 2:size(list_verts, 1)-1
-        v2 = Vec3(list_verts[i, :]...)
-        v3 = Vec3(list_verts[i+1, :]...)
-        push!(Δs, Triangle(v1, v2, v3; color=color, reflection=0f0))
+        v2 = Vec3(list_verts[i, 1], -list_verts[i, 2], list_verts[i, 3])
+        v3 = Vec3(list_verts[i+1, 1], -list_verts[i+1, 2], list_verts[i+1, 3])
+        push!(Δs, Triangle(v1, v2, v3; color=color))
     end
     return Δs
 end
@@ -265,7 +265,7 @@ function step!(db_obj::DuckiebotObj, delta_time, closest_curve_point, objects)
         curve_point, _ = closest_curve_point(follow_point, db_obj.wobj.angle)
 
         # If we have a valid point on the curve, stop
-        isa(curve_point, Nothing) && break
+        isnothing(curve_point) && break
 
         iterations += 1
         lookup_distance *= 0.5
@@ -284,13 +284,13 @@ end
 function get_dir_vec(db_obj::DuckiebotObj, angle)
     x = cos(angle)
     z = -sin(angle)
-    return vcat(x, 0, z)
+    return [x, 0, z]
 end
 
 function get_right_vec(db_obj::DuckiebotObj, angle)
     x = sin(angle)
     z = cos(angle)
-    return vcat(x, 0, z)
+    return [x, 0, z]
 end
 
 function check_collision(db_obj::DuckiebotObj, agent_corners, agent_norm)

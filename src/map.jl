@@ -103,8 +103,8 @@ function ObjectData(map_data::Dict, road_tile_size, domain_rand, grid)
     end
     # If there are collidable objects
     if length(collidable_corners) > 0
-        collidable_corners = vcat(collidable_corners...)
-        collidable_norms = vcat(collidable_norms...)
+        collidable_corners = permutedims(hcat(collidable_corners...))
+        collidable_norms = permutedims(hcat(collidable_norms...))
 
         # Stack doesn't do anything if there's only one object,
         # So we add an extra dimension to avoid shape errors later
@@ -118,13 +118,12 @@ function ObjectData(map_data::Dict, road_tile_size, domain_rand, grid)
                collidable_norms, collidable_safety_radii)
 end
 
-
-function _get_curve(grid, i, j, road_tile_size)
+function _get_curve(grid, i, j, width, height, road_tile_size)
     ##
     #    Get the Bezier curve control points for a given tile
     ##
-    tile = _get_tile(grid, i, j)
-    @assert !isa(tile, Nothing)
+    tile = _get_tile(grid, i, j, width, height)
+    @assert !isnothing(tile)
 
     kind = tile["kind"]
     angle = tile["angle"]
@@ -244,18 +243,18 @@ function _get_curve(grid, i, j, road_tile_size)
     # Hardcoded each curve; just rotate and shift
     elseif startswith(kind, "3way")
         threeway_pts = []
-        mat = gen_rot_matrix([0, 1, 0], angle * π / 2)
+        mat = gen_rot_matrix([0f0, 1f0, 0f0], angle * π / 2)
         #NOTE: pts is 3D matrix, find a work around if * does not work
         pts_new = map(x -> x * mat, pts)
-        add_vec = [(i + 0.5) * road_tile_size 0 (j + 0.5) * road_tile_size;]
+        add_vec = [(i - 0.5f0) 0f0 (j - 0.5f0);] * road_tile_size
         pts_new = map(x -> x .+ add_vec, pts_new)
         push!(threeway_pts, pts_new...)
 
         return cat(threeway_pts..., dims=3)
     else
-        mat = gen_rot_matrix([0, 1, 0], angle * π / 2)
+        mat = gen_rot_matrix([0f0, 1f0, 0f0], angle * π / 2)
         pts = map(x -> x * mat, pts)
-        add_vec = [(i + 0.5) * road_tile_size 0 (j + 0.5) * road_tile_size;]
+        add_vec = [(i-0.5f0) 0f0 (j + 0.5f0);] * road_tile_size
         pts = map(x -> x .+ add_vec, pts)
     end
 
@@ -266,7 +265,7 @@ struct Grid
     road_tile_size
     grid_width::Int
     grid_height::Int
-    _grid::Matrix
+    _grid::Vector
     obj_data::ObjectData
     road_vlist
     road_tlist
@@ -277,21 +276,20 @@ struct Grid
 end
 
 
-function _set_tile!(grid, i, j, tile)
-    grid_width, grid_height = size(grid)
-    @assert 1 ≤ i ≤ grid_width
-    @assert 1 ≤ j ≤ grid_height
-    grid[(j-1) * grid_width + i] = tile
+function _set_tile!(grid, i, j, width, height, tile)
+    @assert 1 ≤ i ≤ width
+    @assert 1 ≤ j ≤ height
+    grid[(j-1)*width + i] = tile
 end
 
+_get_tile(grid::Grid, i, j) = _get_tile(grid._grid, i, j, grid.grid_width, grid.grid_height)
 
-function _get_tile(grid, i, j)
+function _get_tile(grid, i, j, width, height)
     ##
     #Returns nothing if the duckiebot is not in a tile.
     ##
-    grid_width, grid_height = size(grid)
-    if 1 ≤ i ≤ grid_width && 1 ≤ j ≤ grid_height
-        return grid[(j-1) * grid_width + i]
+    if 1 ≤ i ≤ width && 1 ≤ j ≤ height
+        return grid[(j-1)*width + i]
     end
 
     return nothing
@@ -314,14 +312,14 @@ function Grid(map_data::Dict, domain_rand)
     # Create the grid
     grid_height = length(tiles)
     grid_width = length(tiles[1])
-    _grid = Matrix{Union{Missing, Dict{String,Any}}}(missing, grid_width, grid_height)
+    _grid = Vector{Union{Missing, Dict{String,Any}}}(missing, grid_width * grid_height)
 
     # We keep a separate list of drivable tiles
     drivable_tiles = []
 
     # For each row in the grid
     for (j, row) ∈ enumerate(tiles)
-        msg = "each row of tiles must have the same length"
+        msg = "each row of tiles must hMatrixave the same length"
         if length(row) != grid_width
             error(msg)
         end
@@ -336,7 +334,7 @@ function Grid(map_data::Dict, domain_rand)
                 kind, orient = split(tile, '/')
                 kind = strip(kind, ' ')
                 orient = strip(orient, ' ')
-                angle = findfirst(isequal(orient), ["S", "E", "N", "W"])
+                angle = findfirst(isequal(orient), ["S", "E", "N", "W"]) - 1
                 drivable = true
             elseif '4' ∈ tile
                 kind = "4way"
@@ -355,10 +353,11 @@ function Grid(map_data::Dict, domain_rand)
                 "drivable"=> drivable
             ])
 
-            _set_tile!(_grid, i, j, tile)
+            _set_tile!(_grid, i, j, grid_width, grid_height, tile)
 
             if drivable
-                tile["curves"] = _get_curve(_grid, i, j, road_tile_size)
+                tile["curves"] = _get_curve(_grid, i, j, grid_width,
+                                            grid_height, road_tile_size)
                 push!(drivable_tiles, tile)
             end
         end
@@ -371,13 +370,16 @@ function Grid(map_data::Dict, domain_rand)
     start_tile = nothing
     if "start_tile" ∈ keys(map_data)
         coords = map_data["start_tile"]
-        start_tile = _get_tile(_grid, coords...)
+        coords .+= 1
+        start_tile = _get_tile(_grid, coords..., grid_width, grid_height)
     end
 
     Grid(road_tile_size, grid_width, grid_height, _grid, obj_data, road_vlist,
          road_tlist, ground_vlist, drivable_tiles, mesh, start_tile)
 end
 
+_get_curve(grid::Grid, i, j) = _get_curve(grid._grid, i, j, grid.grid_width,
+                                          grid.grid_height, grid.road_tile_size)
 
 mutable struct Map
     map_name::String
