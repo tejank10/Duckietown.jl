@@ -240,7 +240,7 @@ version = "0.17.0"
 deps = ["Cairo", "Colors", "DataStructures", "Flux", "Gtk", "Images", "Reexport"]
 git-tree-sha1 = "00c7d32d3b736302c55f9a8bf1dc8e4cc623cee9"
 repo-rev = "master"
-repo-url = "git@github.com:FluxML/Gym.jl.git"
+repo-url = "https://github.com/FluxML/Gym.jl.git"
 uuid = "56b9baea-2481-11e9-37ae-75904354ad8c"
 version = "0.1.0"
 
