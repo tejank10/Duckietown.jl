@@ -1318,13 +1318,13 @@ function render_obs(sim::Simulator)
 
     im = raytrace(origin, direction, observation, light, origin, 2)
 
-    #color_r = improcess(im.x, sim.camera_width, sim.camera_height)
-    #color_g = improcess(im.y, sim.camera_width, sim.camera_height)
-    #color_b = improcess(im.z, sim.camera_width, sim.camera_height)
+    color_r = improcess(im.x, sim.camera_width, sim.camera_height)
+    color_g = improcess(im.y, sim.camera_width, sim.camera_height)
+    color_b = improcess(im.z, sim.camera_width, sim.camera_height)
 
-    #shape = (sim.camera_width, sim.camera_height, 3, 1)
-    #im_arr = zeroonenorm(reshape(hcat(color_r, color_g, color_b), shape))
-    return im
+    shape = (sim.camera_width, sim.camera_height, 3, 1)
+    im_arr = zeroonenorm(reshape(hcat(color_r, color_g, color_b), shape))
+    return im_arr
 end
 
 function render(sim::Simulator, mode="human", close=false)
