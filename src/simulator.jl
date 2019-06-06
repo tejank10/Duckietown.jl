@@ -107,7 +107,7 @@ end
 struct NotInLane <: Exception end
 
 
-mutable struct Simulator <: Gym.AbstractEnv
+mutable struct Simulator
     ##
     #Simple road simulator to test RL training.
     #Draws a road with turns using OpenGL, and simulates
@@ -128,8 +128,8 @@ mutable struct Simulator <: Gym.AbstractEnv
     camera_width::Int
     camera_height::Int
     robot_speed::Float32
-    action_space::Space.Box
-    observation_space::Space.Box
+    action_space::Box
+    observation_space::Box
     reward_range::NTuple{2, Int}
     #window                          # Window for displaying the environment to humans
     #img_array::Array               # Array to render the image into (for observation rendering)
@@ -210,12 +210,12 @@ function Simulator(
     graphics = true
 
     # Two-tuple of wheel torques, each in the range [-1, 1]
-    action_space = Space.Box(-1, 1, (2,), Float32)
+    action_space = Box(-1, 1, (2,), Float32)
 
     # We observe an RGB image with pixels in [0, 255]
     # Note: the pixels are in UInt8 format because this is more compact
     # than Float32 if sent over the network or stored in a dataset
-    observation_space = Space.Box(0, 255, (camera_height, camera_width, 3), UInt8)
+    observation_space = Box(0, 255, (camera_height, camera_width, 3), UInt8)
 
     reward_range = (-1000, 1000)
 

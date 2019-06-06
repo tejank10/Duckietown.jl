@@ -1,8 +1,7 @@
 module Duckietown
 
-using Gym
 using YAML
-using Gym: Space
+using Space
 using Distributions
 using Random
 using RayTracer
