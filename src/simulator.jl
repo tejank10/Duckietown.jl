@@ -169,7 +169,7 @@ function Simulator(
         frame_skip::Int=DEFAULT_FRAME_SKIP,
         camera_width::Int=DEFAULT_CAMERA_WIDTH,
         camera_height::Int=DEFAULT_CAMERA_HEIGHT,
-        robot_speed::Real=DEFAULT_ROBOT_SPEED,
+        robot_speed::Float32=DEFAULT_ROBOT_SPEED,
         accept_start_angle_deg::Real=DEFAULT_ACCEPT_START_ANGLE_DEG,
         full_transparency::Bool=false,
         user_tile_start=nothing,
@@ -644,7 +644,7 @@ function reset!(sim::Simulator)
 
         inconvenient && continue
 
-        invalid = !_valid_pose(sim, propose_pos, propose_angle, 1.3)
+        invalid = !_valid_pose(sim, propose_pos, propose_angle, 1.3f0)
         invalid && continue
 
         # If the angle is too far away from the driving direction, retry
@@ -756,7 +756,7 @@ function get_grid_coords(road_tile_size, abs_pos)
     i = floor(x / road_tile_size)
     j = floor(z / road_tile_size)
 
-    return Int.((i, j))
+    return Int.((i, j)) .+ 1
 end
 
 get_dir_vec(sim::Simulator) = get_dir_vec(sim.cur_angle)
@@ -906,7 +906,7 @@ update_physics(sim::Simulator, action) = update_physics(sim, action, sim.delta_t
 update_physics(sim::Simulator, action, ::Nothing) = update_physics(sim, action, sim.delta_time)
 
 function update_physics(sim::Simulator, action, delta_time)
-    sim.wheelVels = action * sim.robot_speed * 1
+    sim.wheelVels = action * sim.robot_speed
     prev_pos = sim.cur_pos
 
     # Update the robot's position
@@ -1318,13 +1318,13 @@ function render_obs(sim::Simulator)
 
     im = raytrace(origin, direction, observation, light, origin, 2)
 
-    color_r = improcess(im.x, sim.camera_width, sim.camera_height)
-    color_g = improcess(im.y, sim.camera_width, sim.camera_height)
-    color_b = improcess(im.z, sim.camera_width, sim.camera_height)
+    #color_r = improcess(im.x, sim.camera_width, sim.camera_height)
+    #color_g = improcess(im.y, sim.camera_width, sim.camera_height)
+    #color_b = improcess(im.z, sim.camera_width, sim.camera_height)
 
-    shape = (sim.camera_width, sim.camera_height, 3, 1)
-    im_arr = zeroonenorm(reshape(hcat(color_r, color_g, color_b), shape))
-    return im_arr
+    #shape = (sim.camera_width, sim.camera_height, 3, 1)
+    #im_arr = zeroonenorm(reshape(hcat(color_r, color_g, color_b), shape))
+    return im
 end
 
 function render(sim::Simulator, mode="human", close=false)

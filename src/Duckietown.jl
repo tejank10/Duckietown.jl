@@ -21,6 +21,6 @@ include("randomization/randomizer.jl")
 include("simulator.jl")
 
 
-export Simulator, step!
+export Simulator, step!, reset!
 
 end # module
