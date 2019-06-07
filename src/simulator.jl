@@ -138,14 +138,14 @@ mutable struct Simulator
     user_tile_start                 # Start tile
     distortion::Bool
     randomize_maps_on_reset::Bool
-    last_action::Vector{Float32}
-    wheelVels::Vector{Float32}
+    last_action
+    wheelVels
     camera_model::Nothing
     map_names::Union{Vector{String}, Nothing}
     undistort::Bool
     step_count::Int
     timestamp::Float32
-    speed::Real
+    speed
     horizon_color::Vec3
     ground_color::Vec3
     wheel_dist::Float32
@@ -153,10 +153,10 @@ mutable struct Simulator
     cam_angle::Vector
     cam_fov_y::Float32
     cam_offset::Vector
-    cur_pos::Union{Vector, Nothing}
-    cur_angle::Union{Float32, Nothing}
-    img_array::Array{UInt8, 3}
-    img_array_human::Array{UInt8, 3}
+    cur_pos
+    cur_angle
+    img_array
+    img_array_human
 end
 
 function Simulator(
@@ -281,7 +281,7 @@ function Simulator(
     timestamp = 0f0
 
     # Robot's current speed
-    speed = 0
+    speed = 0f0
 
     horizon_color = BLUE_SKY_COLOR
     ground_color = GROUND_COLOR
@@ -491,7 +491,7 @@ function reset!(sim::Simulator)
     sim.timestamp = 0f0
 
     # Robot's current speed
-    sim.speed = 0
+    sim.speed = 0f0
 
 
     if sim.randomize_maps_on_reset
@@ -1068,7 +1068,7 @@ function _compute_done_reward(sim::Simulator)
         done_code = "max-steps-reached"
     else
         done = false
-        reward = compute_reward(sim, sim.cur_pos, sim.cur_angle, sim.robot_speed)
+        reward = compute_reward(sim, sim.cur_pos, sim.cur_angle, sim.speed)
         msg = ""
         done_code = "in-progress"
     end
