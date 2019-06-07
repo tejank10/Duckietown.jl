@@ -18,13 +18,13 @@ DEFAULT_CAMERA_WIDTH = 640
 DEFAULT_CAMERA_HEIGHT = 480
 
 # Blue sky horizon color
-BLUE_SKY_COLOR = Vec3(0.45f0, 0.82f0, 1f0)
+BLUE_SKY_COLOR = Vec3([0.45f0], [0.82f0], [1f0])
 
 # Color meant to approximate interior walls
-WALL_COLOR = Vec3(0.64f0, 0.71f0, 0.28f0)
+WALL_COLOR = Vec3([0.64f0], [0.71f0], [0.28f0])
 
 # Ground/floor color
-GROUND_COLOR = Vec3(0.15f0)
+GROUND_COLOR = Vec3([0.15f0])
 
 # Angle at which the camera is pitched downwards
 CAMERA_ANGLE = 20f0
@@ -584,7 +584,7 @@ function reset!(sim::Simulator)
         tile["texture"] = Graphics.get(tile["kind"], rng)
 
         # Random tile color multiplier
-        tile["color"] = _perturb(sim, Vec3(1f0), 0.2f0)
+        tile["color"] = _perturb(sim, Vec3([1f0]), 0.2f0)
     end
 
     # Randomize object parameters
@@ -1144,14 +1144,14 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
         y = 5f0
         z = (sim.grid_height * sim.road_tile_size) / 2f0
 
-        eye = Vec3(x, y, z)
-        target = Vec3(x, 0f0, z)
-        vup = Vec3(0f0, 0f0, -1f0)
+        eye = Vec3([x], [y], [z])
+        target = Vec3([x], [0f0], [z])
+        vup = Vec3([0f0], [0f0], [-1f0])
         cam = Camera(eye, target, vup, sim.cam_fov_y, 1f0, width, height)
     else
-        eye = Vec3(x, y, z)
-        target = Vec3(x+dx, y+dy, z+dz)
-        vup = Vec3(0f0, -1f0, 0f0)
+        eye = Vec3([x], [y], [z])
+        target = Vec3([x+dx], [y+dy], [z+dz])
+        vup = Vec3([0f0], [-1f0], [0f0])
         cam = Camera(eye, target, vup, sim.cam_fov_y, 1f0, width, height)
     end
 
@@ -1310,10 +1310,10 @@ function render_obs(sim::Simulator)
     if sim.domain_rand
         light_pos = Vec3(sim.randomization_settings["light_pos"]...)
     else
-        light_pos = Vec3(-40f0, 200f0, 100f0)
+        light_pos = Vec3([-40f0], [200f0], [100f0])
     end
 
-    light = DistantLight(Vec3(1f0), 5000f0, Vec3(0f0, -1f0, 0f0))#PointLight(Vec3(1f0), 1000000f0, light_pos)
+    light = DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [-1f0], [0f0]))#PointLight(Vec3(1f0), 1000000f0, light_pos)
     origin, direction = get_primary_rays(cam)
 
     im = raytrace(origin, direction, observation, light, origin, 2)
