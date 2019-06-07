@@ -1437,7 +1437,7 @@ function _update_pos(pos, angle, wheel_dist, wheelVels, deltaTime)
     w = (Vr - Vl) / l
 
     # Compute the distance to the center of curvature
-    r = (l * (Vl + Vr)) / (2(Vl - Vr))
+    r = (l * (Vl + Vr)) / (2f0(Vl - Vr))
 
     # Compute the rotation angle for this time step
     rotAngle = w * deltaTime
@@ -1445,8 +1445,8 @@ function _update_pos(pos, angle, wheel_dist, wheelVels, deltaTime)
     # Rotate the robot's position around the center of rotation
     r_vec = get_right_vec(angle)
     px, py, pz = pos
-    cx = px + r * r_vec[1]
-    cz = pz + r * r_vec[3]
+    cx = px + r * r_vec[1:1]
+    cz = pz + r * r_vec[3:3]
     npx, npz = rotate_point(px, pz, cx, cz, rotAngle)
     pos = vcat(npx, py, npz)
 
