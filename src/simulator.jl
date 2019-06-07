@@ -154,7 +154,7 @@ mutable struct Simulator
     cam_fov_y::Float32
     cam_offset::Vector
     cur_pos::Union{Vector{Float32}, Nothing}
-    cur_angle::Union{Vector{Float32}, Nothing}
+    cur_angle::Union{Float32, Nothing}
     img_array
     img_array_human
 end
