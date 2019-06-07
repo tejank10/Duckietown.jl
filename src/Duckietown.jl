@@ -5,7 +5,6 @@ using Space
 using Distributions
 using Random
 using RayTracer
-using Images
 
 include("utils.jl")
 
@@ -20,6 +19,6 @@ include("randomization/randomizer.jl")
 include("simulator.jl")
 
 
-export Simulator, step!, reset!, state
+export Simulator, step!, reset!, render_obs
 
 end # module

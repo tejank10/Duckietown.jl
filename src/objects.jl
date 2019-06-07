@@ -97,11 +97,11 @@ function render(obj::AbstractWorldObj, draw_bbox)
 end
 
 function triangulate_faces(list_verts::Matrix, color::Vec3)
-    v1 = Vec3(list_verts[1, 1:1], -list_verts[1, 2:2], list_verts[1, 3:3])
+    v1 = Vec3(list_verts[1, 1:1], list_verts[1, 2:2], list_verts[1, 3:3])
     Δs = []
     for i in 2:size(list_verts, 1)-1
-        v2 = Vec3(list_verts[i, 1:1], -list_verts[i, 2:2], list_verts[i, 3:3])
-        v3 = Vec3(list_verts[i+1, 1:1], -list_verts[i+1, 2:2], list_verts[i+1, 3:3])
+        v2 = Vec3(list_verts[i, 1:1], list_verts[i, 2:2], list_verts[i, 3:3])
+        v3 = Vec3(list_verts[i+1, 1:1], list_verts[i+1, 2:2], list_verts[i+1, 3:3])
         push!(Δs, Triangle(v1, v2, v3; color=color))
     end
     return Δs

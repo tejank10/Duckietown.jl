@@ -679,7 +679,7 @@ end
 
 function Base.show(io::IO, sim::Simulator)
     map_name = sim._map.map_name
-    println("Simulator($map_name)")
+    print("Simulator($map_name)")
 end
 
 function close(sim::Simulator) end
@@ -1035,7 +1035,7 @@ function compute_reward(sim::Simulator, pos, angle, speed)
     return reward
 end
 
-function step!(sim::Simulator, action)
+function step!(sim::Simulator, action::Vector{Float32})
     action = clamp.(action, -1f0, 1f0)
 
     for _ in 1:sim.frame_skip
@@ -1043,12 +1043,12 @@ function step!(sim::Simulator, action)
     end
 
     # Generate the current camera image
-    obs = render_obs(sim)
+    s = render_obs(sim)
     misc = get_agent_info(sim)
 
     d = _compute_done_reward(sim)
     misc["Simulator"]["msg"] = d.done_why
-    return obs, d.reward, d.done, misc
+    return s, action, d.reward, d.done, misc
 end
 
 function _compute_done_reward(sim::Simulator)
@@ -1130,7 +1130,7 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
         y += 0.8f0
         trans_mat = rotate_mat(90f0, 1, 0, 0)
     elseif !top_down
-        y -= sim.cam_height
+        y += sim.cam_height
         trans_mat = rotate_mat(sim.cam_angle[1], (1, 0, 0))
         trans_mat = rotate_mat(sim.cam_angle[2], (0, 1, 0)) * trans_mat
         trans_mat = rotate_mat(sim.cam_angle[3], (0, 0, 1)) * trans_mat
@@ -1151,7 +1151,7 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
     else
         eye = Vec3([x], [y], [z])
         target = Vec3([x+dx], [y+dy], [z+dz])
-        vup = Vec3([0f0], [-1f0], [0f0])
+        vup = Vec3([0f0], [1f0], [0f0])
         cam = Camera(eye, target, vup, sim.cam_fov_y, 1f0, width, height)
     end
 
@@ -1313,11 +1313,10 @@ function render_obs(sim::Simulator)
         light_pos = Vec3([-40f0], [200f0], [100f0])
     end
 
-    light = DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [-1f0], [0f0]))#PointLight(Vec3(1f0), 1000000f0, light_pos)
+    light = DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))#PointLight(Vec3(1f0), 1000000f0, light_pos)
     origin, direction = get_primary_rays(cam)
 
     im = raytrace(origin, direction, observation, light, origin, 2)
-
     color_r = improcess(im.x, sim.camera_width, sim.camera_height)
     color_g = improcess(im.y, sim.camera_width, sim.camera_height)
     color_b = improcess(im.z, sim.camera_width, sim.camera_height)
@@ -1326,8 +1325,6 @@ function render_obs(sim::Simulator)
     im_arr = zeroonenorm(reshape(hcat(color_r, color_g, color_b), shape))
     return im_arr
 end
-
-state(sim::Simulator) = render_obs(sim)
 
 function render(sim::Simulator, mode="human", close=false)
     ##
