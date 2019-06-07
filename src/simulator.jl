@@ -1445,8 +1445,8 @@ function _update_pos(pos, angle, wheel_dist, wheelVels, deltaTime)
     # Rotate the robot's position around the center of rotation
     r_vec = get_right_vec(angle)
     px, py, pz = pos
-    cx = px + r * r_vec[1]
-    cz = pz + r * r_vec[3]
+    cx = px .+ r * r_vec[1]
+    cz = pz .+ r * r_vec[3]
     npx, npz = rotate_point(px, pz, cx, cz, rotAngle)
     pos = [npx, py, npz]
 
