@@ -1327,6 +1327,8 @@ function render_obs(sim::Simulator)
     return im_arr
 end
 
+state(sim::Simulator) = render_obs(sim)
+
 function render(sim::Simulator, mode="human", close=false)
     ##
     #Render the environment for human viewing
