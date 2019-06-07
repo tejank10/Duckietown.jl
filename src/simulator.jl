@@ -138,14 +138,14 @@ mutable struct Simulator
     user_tile_start                 # Start tile
     distortion::Bool
     randomize_maps_on_reset::Bool
-    last_action
-    wheelVels
+    last_action::Vector{Float32}
+    wheelVels::Vector{Float32}
     camera_model::Nothing
     map_names::Union{Vector{String}, Nothing}
     undistort::Bool
     step_count::Int
     timestamp::Float32
-    speed
+    speed::Float32
     horizon_color::Vec3
     ground_color::Vec3
     wheel_dist::Float32
@@ -153,7 +153,7 @@ mutable struct Simulator
     cam_angle::Vector
     cam_fov_y::Float32
     cam_offset::Vector
-    cur_pos
+    cur_pos::Vector{Float32}
     cur_angle
     img_array
     img_array_human
@@ -1445,10 +1445,10 @@ function _update_pos(pos, angle, wheel_dist, wheelVels, deltaTime)
     # Rotate the robot's position around the center of rotation
     r_vec = get_right_vec(angle)
     px, py, pz = pos
-    cx = px + r * r_vec[1:1]
-    cz = pz + r * r_vec[3:3]
+    cx = px + r * r_vec[1]
+    cz = pz + r * r_vec[3]
     npx, npz = rotate_point(px, pz, cx, cz, rotAngle)
-    pos = vcat(npx, py, npz)
+    pos = [npx, py, npz]
 
     # Update the robot's direction angle
     angle = angle + rotAngle
