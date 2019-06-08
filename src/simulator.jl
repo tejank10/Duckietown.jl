@@ -1075,7 +1075,7 @@ function _compute_done_reward(sim::Simulator)
     return DoneRewardInfo(done, msg, reward, done_code)
 end
 
-function _render_img(sim::Simulator, width, height, img_array, top_down=true)
+function _render_img(sim::Simulator, width, height, top_down=true)
     ##
     #Render an image of the environment into a frame buffer
     #Produce a numpy RGB array image as output
@@ -1295,7 +1295,6 @@ function render_obs(sim::Simulator)
             sim.camera_height,
             #sim.multi_fbo,
             #sim.final_fbo,
-            sim.img_array,
             false
     )
 
