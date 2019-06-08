@@ -138,7 +138,7 @@ function translation_mat(pos::Vector)
     return mat
 end
 
-scale_mat(scale...) = scale_mat(collect(FLoat32.(scale)))
+scale_mat(scale...) = scale_mat(collect(Float32.(scale)))
 
 scale_mat(scale::Float32) = scale_mat(ones(Float32, 3) * scale)
 
