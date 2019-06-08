@@ -165,7 +165,7 @@ end
 function transform_mat(mat::Matrix{T}, transformation_mat::Matrix{T}) where T
     numVecs, dim = size(mat)
     veclist = ones(eltype(mat), numVecs, dim+1)
-    veclist[:, 1:dim] = mat
+    veclist[:, 1:dim] = veclist[:, 1:dim] .* mat
     return (veclist * transformation_mat)[:, 1:dim]
 end
 
