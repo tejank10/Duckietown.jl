@@ -127,7 +127,7 @@ function triangulate_faces(list_verts::AbstractArray{T, 3}, list_colors::Vector{
 end
 
 get_transformation_mat(pos::Vector, scale, θ, rot_axis) =
-    rotate_mat(θ) * scale_mat(scale) * translation_mat(pos)
+    rotate_mat(θ) * scale_mat(scale) * translation_mat(pos)_render_img
 
 translation_mat(pos...) = translation_mat(pos)
 
@@ -138,11 +138,11 @@ function translation_mat(pos::Vector)
     return mat
 end
 
-scale_mat(scale...) = scale_mat(scale)
+scale_mat(scale...) = scale_mat(collect(FLoat32.(scale)))
 
 scale_mat(scale::Float32) = scale_mat(ones(Float32, 3) * scale)
 
-function scale_mat(scale::Vector)
+function scale_mat(scale::Vector{Float32})
     # scale is a vector of length 3
     scale_ = vcat(scale, 1f0)
     mat = Matrix{Float32}(I, 4, 4)
