@@ -140,7 +140,7 @@ scale_mat(pos...) = scale_mat(pos)
 
 function scale_mat(scale)
     mat = Matrix{Float32}(I, 4, 4)
-    mat[1:3, 1:3] *= scale
+    mat[1:3, 1:3] = mat[1:3, 1:3] .* scale
     return mat
 end
 
