@@ -694,7 +694,7 @@ function _perturb(sim::Simulator, val, scale=0.1f0)
     ##
     #Add noise to a value. This is used for domain randomization.
     ##
-    @assert 0f0 ≤ scale < 1f0
+    #@assert 0f0 ≤ scale < 1f0
 
     !sim.domain_rand && (return val)
 
