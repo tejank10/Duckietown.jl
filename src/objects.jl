@@ -132,10 +132,9 @@ get_transformation_mat(pos::Vector, scale, θ, rot_axis) =
 translation_mat(pos...) = translation_mat(pos)
 
 function translation_mat(pos::Vector)
-    @assert length(pos) == 3
-    mat = Matrix{Float32}(I, 4, 4)
-    mat[4, 1:3] .= pos
-    return mat
+    #@assert length(pos) == 3
+    mat = Matrix{Float32}(I, 3, 3)
+    return hcat(vcat(mat, pos), [0f0, 0f0, 0f0, 1f0])
 end
 
 scale_mat(scale...) = scale_mat(collect(Float32.(scale)))
