@@ -164,9 +164,8 @@ end
 
 function transform_mat(mat::Matrix{T}, transformation_mat::Matrix{T}) where T
     numVecs, dim = size(mat)
-    veclist = ones(eltype(mat), numVecs, dim+1)
-    veclist[:, 1:dim] = veclist[:, 1:dim] .* mat
-    return (veclist * transformation_mat)[:, 1:dim]
+    mat_ = hcat(mat, ones(eltype(mat), numVecs))
+    return (mat_ * transformation_mat)[:, 1:dim]
 end
 
 function tranform_mesh(mesh_mat::AbstractArray{T, 3}, transformation_mat::Matrix{T}) where T
