@@ -133,6 +133,7 @@ translation_mat(pos...) = translation_mat(pos)
 
 function translation_mat(pos::Vector)
     #@assert length(pos) == 3
+    pos = reshape(pos, 1, 3)
     mat = Matrix{Float32}(I, 3, 3)
     return hcat(vcat(mat, pos), [0f0, 0f0, 0f0, 1f0])
 end
