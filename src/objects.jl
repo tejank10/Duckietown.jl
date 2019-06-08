@@ -96,14 +96,16 @@ function render(obj::AbstractWorldObj, draw_bbox)
     #return TriangleMesh(Δ_ed_faces)
 end
 
+function make_Δ(v1::Vec3, vert2::Vector, vert3::Vector, color::Vec3)
+    v2 = Vec3(vert2[1:1], vert2[2:2], vert2[3:3])
+    v3 = Vec3(vert3[1:1], vert3[2:2], vert3[3:3])
+    Triangle(v1, v2, v3; color=color)
+end
+
 function triangulate_faces(list_verts::Matrix, color::Vec3)
     v1 = Vec3(list_verts[1, 1:1], list_verts[1, 2:2], list_verts[1, 3:3])
-    Δs = []
-    for i in 2:size(list_verts, 1)-1
-        v2 = Vec3(list_verts[i, 1:1], list_verts[i, 2:2], list_verts[i, 3:3])
-        v3 = Vec3(list_verts[i+1, 1:1], list_verts[i+1, 2:2], list_verts[i+1, 3:3])
-        push!(Δs, Triangle(v1, v2, v3; color=color))
-    end
+    num_verts = size(list_verts, 1)
+    Δs = map(i->make_Δ(v1, list_verts[i, :], list_verts[i+1, :], color), 2:num_verts-1)
     return Δs
 end
 
