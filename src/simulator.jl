@@ -1075,7 +1075,7 @@ function _compute_done_reward(sim::Simulator)
     return DoneRewardInfo(done, msg, reward, done_code)
 end
 
-function _render_img(sim::Simulator, width, height, top_down=true)
+function _render_img(sim::Simulator, top_down=true)
     ##
     #Render an image of the environment into a frame buffer
     #Produce a numpy RGB array image as output
@@ -1147,12 +1147,12 @@ function _render_img(sim::Simulator, width, height, top_down=true)
         eye = Vec3([x], [y], [z])
         target = Vec3([x], [0f0], [z])
         vup = Vec3([0f0], [0f0], [-1f0])
-        cam = Camera(eye, target, vup, sim.cam_fov_y, 1f0, width, height)
+        cam = Camera(eye, target, vup, sim.cam_fov_y, 1f0, sim.camera_width, sim.camera_height)
     else
         eye = Vec3([x], [y], [z])
         target = Vec3([x+dx], [y+dy], [z+dz])
         vup = Vec3([0f0], [1f0], [0f0])
-        cam = Camera(eye, target, vup, sim.cam_fov_y, 1f0, width, height)
+        cam = Camera(eye, target, vup, sim.cam_fov_y, 1f0, sim.camera_width, sim.camera_height)
     end
 
 
@@ -1291,8 +1291,8 @@ function render_obs(sim::Simulator)
 
     observation, cam = _render_img(
             sim,
-            sim.camera_width,
-            sim.camera_height,
+            #sim.camera_width,
+            #sim.camera_height,
             #sim.multi_fbo,
             #sim.final_fbo,
             false
@@ -1312,7 +1312,7 @@ function render_obs(sim::Simulator)
         light_pos = Vec3([-40f0], [200f0], [100f0])
     end
 
-    light = PointLight(Vec3([1f0]), 10000f0, light_pos)#DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))
+    light = PointLight(Vec3([1f0]), 1f12, light_pos)#DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))
     origin, direction = get_primary_rays(cam)
 
     im = raytrace(origin, direction, observation, light, origin, 2)
