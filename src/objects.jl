@@ -138,12 +138,15 @@ function translation_mat(pos::Vector)
     return mat
 end
 
-scale_mat(pos...) = scale_mat(pos)
+scale_mat(scale...) = scale_mat(scale)
 
-function scale_mat(scale)
+scale_mat(scale::Float32) = scale_mat(ones(Float32, 3) * scale)
+
+function scale_mat(scale::Vector)
+    # scale is a vector of length 3
+    scale_ = vcat(scale, 1f0)
     mat = Matrix{Float32}(I, 4, 4)
-    mat[1:3, 1:3] = mat[1:3, 1:3] .* scale
-    return mat
+    return mat .* scale
 end
 
 function rotate_mat(θ, axis=(0,1,0))
