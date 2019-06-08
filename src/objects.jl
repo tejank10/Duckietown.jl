@@ -146,7 +146,8 @@ function scale_mat(scale::Vector{Float32})
     # scale is a vector of length 3
     scale_ = vcat(scale, 1f0)
     mat = Matrix{Float32}(I, 4, 4)
-    return mat .* scale_
+    mat_ = mat .* scale_
+    return mat_
 end
 
 function rotate_mat(θ, axis=(0,1,0))
