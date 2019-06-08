@@ -150,11 +150,11 @@ function rotate_mat(θ, axis=(0,1,0))
     mat = Matrix{Float32}(I, 4, 4)
     axis = argmax(axis)
     if axis == 2
-        mat[1:2:3, 1:2:3] .= [cos(θ) -sin(θ); sin(θ) cos(θ)]
+        mat[1:2:3, 1:2:3] = [cos(θ) -sin(θ); sin(θ) cos(θ)]
     elseif axis == 1
-        mat[2:3, 2:3] .= [cos(θ) sin(θ); -sin(θ) cos(θ)]
+        mat[2:3, 2:3] = [cos(θ) sin(θ); -sin(θ) cos(θ)]
     else
-        mat[1:2, 1:2] .= [cos(θ) sin(θ); -sin(θ) cos(θ)]
+        mat[1:2, 1:2] = [cos(θ) sin(θ); -sin(θ) cos(θ)]
     end
 
     return mat
