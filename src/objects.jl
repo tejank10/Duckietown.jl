@@ -127,7 +127,7 @@ function triangulate_faces(list_verts::AbstractArray{T, 3}, list_colors::Vector{
 end
 
 get_transformation_mat(pos::Vector, scale, θ, rot_axis) =
-    rotate_mat(θ) * scale_mat(scale) * translation_mat(pos)_render_img
+    rotate_mat(θ) * scale_mat(scale) * translation_mat(pos)
 
 translation_mat(pos...) = translation_mat(collect(Float32.(pos)))
 
