@@ -133,7 +133,7 @@ translation_mat(pos...) = translation_mat(collect(Float32.(pos)))
 
 function translation_mat(pos::Vector{Float32})
     #@assert length(pos) == 3
-    pos_ = reshape(vcat(pos, [1f0]), 1, 3)
+    pos_ = reshape(vcat(pos, [1f0]), 1, 4)
     #mat = Matrix{Float32}(I, 3, 3)
     mat = [
         1f0 0f0 0f0 0f0;
