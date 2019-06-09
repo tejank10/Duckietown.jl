@@ -1125,16 +1125,16 @@ function _render_img(sim::Simulator, top_down=true)
     x, y, z = pos .+ sim.cam_offset
     dx, dy, dz = get_dir_vec(angle)
 
-    trans_mat = Matrix{Float32}(I, 4, 4)
+    #trans_mat = Matrix{Float32}(I, 4, 4)
     if sim.draw_bbox
         y += 0.8f0
-        trans_mat = rotate_mat(90f0, 1, 0, 0)
+    #    trans_mat = rotate_mat(90f0, 1, 0, 0)
     elseif !top_down
         y += sim.cam_height
-        trans_mat = rotate_mat(sim.cam_angle[1], (1, 0, 0))
-        trans_mat = rotate_mat(sim.cam_angle[2], (0, 1, 0)) * trans_mat
-        trans_mat = rotate_mat(sim.cam_angle[3], (0, 0, 1)) * trans_mat
-        trans_mat = translation_mat([0f0, 0f0, _perturb(sim, CAMERA_FORWARD_DIST)]) * trans_mat
+    #    trans_mat = rotate_mat(sim.cam_angle[1], (1, 0, 0))
+    #    trans_mat = rotate_mat(sim.cam_angle[2], (0, 1, 0)) * trans_mat
+    #    trans_mat = rotate_mat(sim.cam_angle[3], (0, 0, 1)) * trans_mat
+    #    trans_mat = translation_mat([0f0, 0f0, _perturb(sim, CAMERA_FORWARD_DIST)]) * trans_mat
     end
     #TODO: DO THIS!!
     cam = nothing
