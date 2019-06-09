@@ -129,9 +129,9 @@ end
 get_transformation_mat(pos::Vector, scale, θ, rot_axis) =
     rotate_mat(θ) * scale_mat(scale) * translation_mat(pos)_render_img
 
-translation_mat(pos...) = translation_mat(pos)
+translation_mat(pos...) = translation_mat(collect(Float32.(pos)))
 
-function translation_mat(pos::Vector)
+function translation_mat(pos::Vector{Float32})
     #@assert length(pos) == 3
     pos = reshape(pos, 1, 3)
     #mat = Matrix{Float32}(I, 3, 3)
