@@ -164,11 +164,6 @@ function rotate_mat(θ, axis=(0,1,0))
     # axis: one-hot vector, each element corresponds to x, y or z axis
     θ = deg2rad(θ)
     #mat = Matrix{Float32}(I, 4, 4)
-    mat = [
-        1f0 0f0 0f0 0f0;
-        0f0 1f0 0f0 0f0;
-        0f0 0f0 1f0 0f0;
-        0f0 0f0 0f0 1f0]
     axis = argmax(axis)
     mat = nothing
     if axis == 2
