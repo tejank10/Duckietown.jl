@@ -140,7 +140,7 @@ function translation_mat(pos::Vector)
         0f0 1f0 0f0 0f0;
         0f0 0f0 1f0 0f0;
         0f0 0f0 0f0 1f0]
-    return hcat(vcat(mat, pos), [0f0, 0f0, 0f0, 1f0])
+    return hcat(vcat(mat, pos), [0f0; 0f0; 0f0; 1f0])
 end
 
 scale_mat(scale...) = scale_mat(collect(Float32.(scale)))
