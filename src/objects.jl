@@ -170,12 +170,25 @@ function rotate_mat(θ, axis=(0,1,0))
         0f0 0f0 1f0 0f0;
         0f0 0f0 0f0 1f0]
     axis = argmax(axis)
+    mat = nothing
     if axis == 2
-        mat[1:2:3, 1:2:3] = [cos(θ) -sin(θ); sin(θ) cos(θ)]
+        mat = [
+        cos(θ) 0f0 -sin(θ) 0f0;
+        0f0    1f0 0f0     0f0;
+        sin(θ) 0f0 cos(θ)  0f0;
+        0f0    0f0 0f0     1f0]
     elseif axis == 1
-        mat[2:3, 2:3] = [cos(θ) sin(θ); -sin(θ) cos(θ)]
+        mat = [
+        1f0    0f0    0f0     0f0;
+        0f0    cos(θ) sin(θ)  0f0;
+        0f0   -sin(θ) cos(θ)  0f0;
+        0f0    0f0    0f0     1f0]
     else
-        mat[1:2, 1:2] = [cos(θ) sin(θ); -sin(θ) cos(θ)]
+        mat = [
+         cos(θ)   sin(θ)   0f0  0f0;
+        -sin(θ)   cos(θ)   0f0  0f0;
+         0f0      0f0      1f0  0f0;
+         0f0      0f0      0f0  1f0]
     end
 
     return mat
