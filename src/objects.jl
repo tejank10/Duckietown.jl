@@ -139,7 +139,7 @@ function translation_mat(pos::Vector{Float32})
         1f0 0f0 0f0 0f0;
         0f0 1f0 0f0 0f0;
         0f0 0f0 1f0 0f0;
-        pos]
+        pos_]
 
     return mat
 end
