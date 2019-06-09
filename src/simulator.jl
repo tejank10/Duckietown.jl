@@ -1313,6 +1313,7 @@ function render_obs(sim::Simulator)
     end
 
     light = PointLight(Vec3([1f0]), 1f12, light_pos)#DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))
+
     origin, direction = get_primary_rays(cam)
 
     im = raytrace(origin, direction, observation, light, origin, 2)
