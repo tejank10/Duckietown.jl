@@ -134,7 +134,12 @@ translation_mat(pos...) = translation_mat(pos)
 function translation_mat(pos::Vector)
     #@assert length(pos) == 3
     pos = reshape(pos, 1, 3)
-    mat = Matrix{Float32}(I, 3, 3)
+    #mat = Matrix{Float32}(I, 3, 3)
+    mat = [
+        1f0 0f0 0f0 0f0;
+        0f0 1f0 0f0 0f0;
+        0f0 0f0 1f0 0f0;
+        0f0 0f0 0f0 1f0]
     return hcat(vcat(mat, pos), [0f0, 0f0, 0f0, 1f0])
 end
 
@@ -158,7 +163,12 @@ end
 function rotate_mat(θ, axis=(0,1,0))
     # axis: one-hot vector, each element corresponds to x, y or z axis
     θ = deg2rad(θ)
-    mat = Matrix{Float32}(I, 4, 4)
+    #mat = Matrix{Float32}(I, 4, 4)
+    mat = [
+        1f0 0f0 0f0 0f0;
+        0f0 1f0 0f0 0f0;
+        0f0 0f0 1f0 0f0;
+        0f0 0f0 0f0 1f0]
     axis = argmax(axis)
     if axis == 2
         mat[1:2:3, 1:2:3] = [cos(θ) -sin(θ); sin(θ) cos(θ)]
