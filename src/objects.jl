@@ -96,14 +96,16 @@ function render(obj::AbstractWorldObj, draw_bbox)
     #return TriangleMesh(Δ_ed_faces)
 end
 
+function make_Δ(v1::Vec3, vert2::Vector, vert3::Vector, color::Vec3)
+    v2 = Vec3(vert2[1:1], vert2[2:2], vert2[3:3])
+    v3 = Vec3(vert3[1:1], vert3[2:2], vert3[3:3])
+    Triangle(v1, v2, v3; color=color)
+end
+
 function triangulate_faces(list_verts::Matrix, color::Vec3)
     v1 = Vec3(list_verts[1, 1:1], list_verts[1, 2:2], list_verts[1, 3:3])
-    Δs = []
-    for i in 2:size(list_verts, 1)-1
-        v2 = Vec3(list_verts[i, 1:1], list_verts[i, 2:2], list_verts[i, 3:3])
-        v3 = Vec3(list_verts[i+1, 1:1], list_verts[i+1, 2:2], list_verts[i+1, 3:3])
-        push!(Δs, Triangle(v1, v2, v3; color=color))
-    end
+    num_verts = size(list_verts, 1)
+    Δs = map(i->make_Δ(v1, list_verts[i, :], list_verts[i+1, :], color), 2:num_verts-1)
     return Δs
 end
 
@@ -127,34 +129,60 @@ end
 get_transformation_mat(pos::Vector, scale, θ, rot_axis) =
     rotate_mat(θ) * scale_mat(scale) * translation_mat(pos)
 
-translation_mat(pos...) = translation_mat(pos)
+translation_mat(pos...) = translation_mat(collect(Float32.(pos)))
 
-function translation_mat(pos::Vector)
-    @assert length(pos) == 3
-    mat = Matrix{Float32}(I, 4, 4)
-    mat[4, 1:3] .= pos
+function translation_mat(pos::Vector{Float32})
+    #@assert length(pos) == 3
+    #mat = Matrix{Float32}(I, 3, 3)
+    mat = [
+        1f0 0f0 0f0 0f0;
+        0f0 1f0 0f0 0f0;
+        0f0 0f0 1f0 0f0;
+        pos[1] pos[2] pos[3] 1f0]
+
     return mat
 end
 
-scale_mat(pos...) = scale_mat(pos)
+scale_mat(scale...) = scale_mat(collect(Float32.(scale)))
 
-function scale_mat(scale)
-    mat = Matrix{Float32}(I, 4, 4)
-    mat[1:3, 1:3] .*= scale
-    return mat
+scale_mat(scale::Float32) = scale_mat(ones(Float32, 3) * scale)
+
+function scale_mat(scale::Vector{Float32})
+    # scale is a vector of length 3
+    scale_ = vcat(scale, [1f0])
+    #mat = Matrix{Float32}(I, 4, 4)
+    mat = [
+        1f0 0f0 0f0 0f0;
+        0f0 1f0 0f0 0f0;
+        0f0 0f0 1f0 0f0;
+        0f0 0f0 0f0 1f0]
+    
+    return mat .* scale_
 end
 
 function rotate_mat(θ, axis=(0,1,0))
     # axis: one-hot vector, each element corresponds to x, y or z axis
     θ = deg2rad(θ)
-    mat = Matrix{Float32}(I, 4, 4)
-    axis = argmax(axis)
-    if axis == 2
-        mat[1:2:3, 1:2:3] .= [cos(θ) -sin(θ); sin(θ) cos(θ)]
-    elseif axis == 1
-        mat[2:3, 2:3] .= [cos(θ) sin(θ); -sin(θ) cos(θ)]
+    #mat = Matrix{Float32}(I, 4, 4)
+    mat = nothing
+    if axis[2] == 1
+        mat = [
+        cos(θ) 0f0 -sin(θ) 0f0;
+        0f0    1f0 0f0     0f0;
+        sin(θ) 0f0 cos(θ)  0f0;
+        0f0    0f0 0f0     1f0]
+    elseif axis[1] == 1
+        mat = [
+        1f0    0f0    0f0     0f0;
+        0f0    cos(θ) sin(θ)  0f0;
+        0f0   -sin(θ) cos(θ)  0f0;
+        0f0    0f0    0f0     1f0]
     else
-        mat[1:2, 1:2] .= [cos(θ) sin(θ); -sin(θ) cos(θ)]
+        mat = [
+         cos(θ)   sin(θ)   0f0  0f0;
+        -sin(θ)   cos(θ)   0f0  0f0;
+         0f0      0f0      1f0  0f0;
+         0f0      0f0      0f0  1f0]
     end
 
     return mat
@@ -162,9 +190,8 @@ end
 
 function transform_mat(mat::Matrix{T}, transformation_mat::Matrix{T}) where T
     numVecs, dim = size(mat)
-    veclist = ones(eltype(mat), numVecs, dim+1)
-    veclist[:, 1:dim] .= mat
-    return (veclist * transformation_mat)[:, 1:dim]
+    mat_ = hcat(mat, ones(eltype(mat), numVecs))
+    return (mat_ * transformation_mat)[:, 1:dim]
 end
 
 function tranform_mesh(mesh_mat::AbstractArray{T, 3}, transformation_mat::Matrix{T}) where T

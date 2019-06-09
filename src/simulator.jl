@@ -694,7 +694,7 @@ function _perturb(sim::Simulator, val, scale=0.1f0)
     ##
     #Add noise to a value. This is used for domain randomization.
     ##
-    @assert 0f0 ≤ scale < 1f0
+    #@assert 0f0 ≤ scale < 1f0
 
     !sim.domain_rand && (return val)
 
@@ -1075,7 +1075,7 @@ function _compute_done_reward(sim::Simulator)
     return DoneRewardInfo(done, msg, reward, done_code)
 end
 
-function _render_img(sim::Simulator, width, height, img_array, top_down=true)
+function _render_img(sim::Simulator, top_down=true)
     ##
     #Render an image of the environment into a frame buffer
     #Produce a numpy RGB array image as output
@@ -1125,16 +1125,16 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
     x, y, z = pos .+ sim.cam_offset
     dx, dy, dz = get_dir_vec(angle)
 
-    trans_mat = Matrix{Float32}(I, 4, 4)
+    #trans_mat = Matrix{Float32}(I, 4, 4)
     if sim.draw_bbox
         y += 0.8f0
-        trans_mat = rotate_mat(90f0, 1, 0, 0)
+    #    trans_mat = rotate_mat(90f0, 1, 0, 0)
     elseif !top_down
         y += sim.cam_height
-        trans_mat = rotate_mat(sim.cam_angle[1], (1, 0, 0))
-        trans_mat = rotate_mat(sim.cam_angle[2], (0, 1, 0)) * trans_mat
-        trans_mat = rotate_mat(sim.cam_angle[3], (0, 0, 1)) * trans_mat
-        trans_mat = translation_mat([0f0, 0f0, _perturb(sim, CAMERA_FORWARD_DIST)]) * trans_mat
+    #    trans_mat = rotate_mat(sim.cam_angle[1], (1, 0, 0))
+    #    trans_mat = rotate_mat(sim.cam_angle[2], (0, 1, 0)) * trans_mat
+    #    trans_mat = rotate_mat(sim.cam_angle[3], (0, 0, 1)) * trans_mat
+    #    trans_mat = translation_mat([0f0, 0f0, _perturb(sim, CAMERA_FORWARD_DIST)]) * trans_mat
     end
     #TODO: DO THIS!!
     cam = nothing
@@ -1147,12 +1147,12 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
         eye = Vec3([x], [y], [z])
         target = Vec3([x], [0f0], [z])
         vup = Vec3([0f0], [0f0], [-1f0])
-        cam = Camera(eye, target, vup, sim.cam_fov_y, 1f0, width, height)
+        cam = Camera(eye, target, vup, sim.cam_fov_y, 1f0, sim.camera_width, sim.camera_height)
     else
         eye = Vec3([x], [y], [z])
         target = Vec3([x+dx], [y+dy], [z+dz])
         vup = Vec3([0f0], [1f0], [0f0])
-        cam = Camera(eye, target, vup, sim.cam_fov_y, 1f0, width, height)
+        cam = Camera(eye, target, vup, sim.cam_fov_y, 1f0, sim.camera_width, sim.camera_height)
     end
 
 
@@ -1160,7 +1160,7 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
     #gl.glDisable(gl.GL_TEXTURE_2D)
     #gl.glColor3f(*sim.ground_color)
     #gl.glPushMatrix()
-    trans_mat = scale_mat(50f0, 1f0, 50f0)
+    trans_mat = scale_mat([50f0, 1f0, 50f0])
     ground_vlist = transform_mat(sim._map._grid.ground_vlist, trans_mat)
     ground_scene = triangulate_faces(ground_vlist, sim.ground_color)
     scene =  vcat(scene, ground_scene)
@@ -1174,7 +1174,7 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
     #gl.glEnable(gl.GL_TEXTURE_2D)
     #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
     #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
-
+    #=
     # For each grid tile
     for j in 1:sim._map._grid.grid_height
         for i in 1:sim._map._grid.grid_width
@@ -1280,7 +1280,7 @@ function _render_img(sim::Simulator, width, height, img_array, top_down=true)
     # Note: this is necessary for gym.wrappers.Monitor to record videos
     # properly, otherwise they are vertically inverted.
     #img_array = np.ascontiguousarray(np.flip(img_array, axis=0))
-
+=#
     return scene, cam
 end
 
@@ -1291,11 +1291,10 @@ function render_obs(sim::Simulator)
 
     observation, cam = _render_img(
             sim,
-            sim.camera_width,
-            sim.camera_height,
+            #sim.camera_width,
+            #sim.camera_height,
             #sim.multi_fbo,
             #sim.final_fbo,
-            sim.img_array,
             false
     )
 
@@ -1313,7 +1312,8 @@ function render_obs(sim::Simulator)
         light_pos = Vec3([-40f0], [200f0], [100f0])
     end
 
-    light = PointLight(Vec3([1f0]), 1f12, light_pos)#DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))#
+    light = PointLight(Vec3([1f0]), 1f12, light_pos)#DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))
+
     origin, direction = get_primary_rays(cam)
 
     im = raytrace(origin, direction, observation, light, origin, 2)
