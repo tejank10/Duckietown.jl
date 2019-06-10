@@ -1177,6 +1177,7 @@ function _render_img(sim::Simulator, top_down=true)
     
     # For each grid tile
     for j in 1:sim._map._grid.grid_height
+        #=
         for i in 1:sim._map._grid.grid_width
             # Get the tile type and angle
             tile = _get_tile(_grid(sim), i, j)
@@ -1220,6 +1221,7 @@ function _render_img(sim::Simulator, top_down=true)
                 end
             end
         end
+        =#
     end
     #=
     # For each object
