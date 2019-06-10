@@ -1176,7 +1176,6 @@ function _render_img(sim::Simulator, top_down=true)
     #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
     
     # For each grid tile
-    #=
     for j in 1:sim._map._grid.grid_height
         for i in 1:sim._map._grid.grid_width
             # Get the tile type and angle
@@ -1228,7 +1227,7 @@ function _render_img(sim::Simulator, top_down=true)
         #TODO: put in scene
         scene = vcat(scene, render(obj, sim.draw_bbox))
     end
-    =#
+    
     # Draw the agent's own bounding box
     if sim.draw_bbox
         #corners = get_agent_corners(pos, angle)
