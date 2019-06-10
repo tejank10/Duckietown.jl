@@ -1176,8 +1176,8 @@ function _render_img(sim::Simulator, top_down=true)
     #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
     
     # For each grid tile
+    #=
     for j in 1:sim._map._grid.grid_height
-        #=
         for i in 1:sim._map._grid.grid_width
             # Get the tile type and angle
             tile = _get_tile(_grid(sim), i, j)
@@ -1221,15 +1221,14 @@ function _render_img(sim::Simulator, top_down=true)
                 end
             end
         end
-        =#
     end
-    #=
+                        
     # For each object
     for obj in _objects(sim)
         #TODO: put in scene
         scene = vcat(scene, render(obj, sim.draw_bbox))
     end
-
+    =#
     # Draw the agent's own bounding box
     if sim.draw_bbox
         #corners = get_agent_corners(pos, angle)
@@ -1283,7 +1282,7 @@ function _render_img(sim::Simulator, top_down=true)
     # Note: this is necessary for gym.wrappers.Monitor to record videos
     # properly, otherwise they are vertically inverted.
     #img_array = np.ascontiguousarray(np.flip(img_array, axis=0))
-    =#
+   
     return scene, cam
 end
 
