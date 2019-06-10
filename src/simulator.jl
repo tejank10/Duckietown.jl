@@ -1227,7 +1227,7 @@ function _render_img(sim::Simulator, top_down=true)
 
     function driver_fn(_j)
         tris_vec = []
-        j = _j / sim._map._grid.grid_height + 1
+        j = _j ÷ sim._map._grid.grid_height + 1
         i = _j % sim._map._grid.grid_height + 1
         return fn(i, j)
     end
