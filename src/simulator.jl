@@ -1206,17 +1206,20 @@ function _render_img(sim::Simulator, top_down=true)
                 curve_headings = curves[end, :, :] .- curves[1, :, :]
                 curve_headings = curve_headings / norm(curve_headings)
                 dirVec = get_dir_vec(angle)
-                dot_prods = [dot(curve_headings[:, i], dirVec) for i in 1:size(curve_heading, 2)]
+                dot_prods = map(i->dot(curve_headings[:, i], dirVec), 1:size(curve_heading, 2))
 
                 # Current ("closest") curve drawn in Red
                 pts = curves[:, :, argmax(dot_prods)]
                 bezier_draw(pts, 20, true)
 
                 pts = _get_curve(_grid(sim), i, j)
-                for (idx, pt) in enumerate(pts)
-                    # Don't draw current curve in blue
-                    idx == argmax(dot_prods) && continue
-                    bezier_draw(pt, 20)
+                len_pts = length(pts)
+                if len_pts > 0
+                    function draw(idx)
+                        idx == argmax(dot_prods) && return
+                        bezier_draw(pts[idx], 20)
+                    end
+                    map(i->draw(i), 1:len_pts)
                 end
             end
         end
