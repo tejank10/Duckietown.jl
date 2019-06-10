@@ -1314,7 +1314,7 @@ function render_obs(sim::Simulator)
         light_pos = Vec3([-40f0], [200f0], [100f0])
     end
 
-    light = DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))
+    light = PointLight(Vec3([1f0]), 1f12, light_pos)#DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))
 
     origin, direction = get_primary_rays(cam)
 
