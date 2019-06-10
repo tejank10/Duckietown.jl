@@ -1225,12 +1225,12 @@ function _render_img(sim::Simulator, top_down=true)
     =#                
     # For each object
     objs = _objects(sim)
-    len_objs = 0#length(objs)
+    #=len_objs = 0#length(objs)
     if len_objs > 0
         for i in 1:len_objs
             scene = vcat(scene, render(objs[i], sim.draw_bbox))
         end
-    end
+    end=#
     
     # Draw the agent's own bounding box
     if sim.draw_bbox
