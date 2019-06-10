@@ -1226,7 +1226,7 @@ function _render_img(sim::Simulator, top_down=true)
     # For each object
     for obj in _objects(sim)
         #TODO: put in scene
-        scene = vcat(scene, render(obj, sim.draw_bbox))
+        #scene = vcat(scene, render(obj, sim.draw_bbox))
     end
 
     # Draw the agent's own bounding box
@@ -1243,8 +1243,8 @@ function _render_img(sim::Simulator, top_down=true)
 
     if top_down
         trans_mat = translation_mat(sim.cur_pos...)
-        trans_mat *= scale_mat(1f0)
-        trans_mat *= rotate_mat(rad2deg(sim.cur_angle))
+        trans_mat = scale_mat(1f0) * trans_mat
+        trans_mat = rotate_mat(rad2deg(sim.cur_angle)) * trans_mat
         # glColor3f(*self.color)
         scene = vcat(scene, render(sim.mesh))
         #gl.glPopMatrix()
