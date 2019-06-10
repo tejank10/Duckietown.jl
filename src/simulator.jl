@@ -1176,8 +1176,6 @@ function _render_img(sim::Simulator, top_down=true)
     #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
     
     function fn(i, j)
-        return 1
-        #=
         tile = _get_tile(_grid(sim), i, j)
             
         (ismissing(tile) || isnothing(tile)) && return
@@ -1191,7 +1189,7 @@ function _render_img(sim::Simulator, top_down=true)
         #gl.glPushMatrix()
         trans_mat = translation_mat(pos)
         trans_mat = rotate_mat(angle * 90f0) * trans_mat
-
+        #=
         # Bind the appropriate texture
         #texture.bind()
 
