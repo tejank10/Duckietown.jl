@@ -1181,7 +1181,7 @@ function _render_img(sim::Simulator, top_down=true)
             # Get the tile type and angle
             tile = _get_tile(_grid(sim), i, j)
 
-            isnothing(tile) && continue
+            ismissing(tile) && continue
             #=
             # kind = tile['kind']
             angle = tile["angle"]
