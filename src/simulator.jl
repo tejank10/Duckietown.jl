@@ -1163,7 +1163,7 @@ function _render_img(sim::Simulator, top_down=true)
     trans_mat = scale_mat([50f0, 1f0, 50f0])
     ground_vlist = transform_mat(sim._map._grid.ground_vlist, trans_mat)
     ground_scene = triangulate_faces(ground_vlist, sim.ground_color)
-    scene =  vcat(scene, ground_scene)
+    scene = vcat(scene, ground_scene)
     # TODO: triangulate this ground vlist and put in scene
     #gl.glPopMatrix()
 
@@ -1175,55 +1175,55 @@ function _render_img(sim::Simulator, top_down=true)
     #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
     #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
     
-    # For each grid tile
-    for j in 1:sim._map._grid.grid_height
-        for i in 1:sim._map._grid.grid_width
-            # Get the tile type and angle
-            tile = _get_tile(_grid(sim), i, j)
+    function fn(i, j)
+        tile = _get_tile(_grid(sim), i, j)
             
-            (ismissing(tile) || isnothing(tile)) && continue
+        (ismissing(tile) || isnothing(tile)) && return
           
-            # kind = tile['kind']
-            angle = tile["angle"]
-            color = tile["color"]
-            texture = tile["texture"]
+        # kind = tile['kind']
+        angle = tile["angle"]
+        color = tile["color"]
+        texture = tile["texture"]
 
-            pos = [(i-0.5f0), 0f0, (j-0.5f0)] * _road_tile_size(sim)
-            #gl.glPushMatrix()
-            trans_mat = translation_mat(pos)
-            trans_mat = rotate_mat(angle * 90f0) * trans_mat
+        pos = [(i-0.5f0), 0f0, (j-0.5f0)] * _road_tile_size(sim)
+        #gl.glPushMatrix()
+        trans_mat = translation_mat(pos)
+        trans_mat = rotate_mat(angle * 90f0) * trans_mat
 
-            # Bind the appropriate texture
-            #texture.bind()
-            
-            road_vlist = sim._map._grid.road_vlist
-            road_vlist = transform_mat(road_vlist, trans_mat)
-            scene = vcat(scene, triangulate_faces(road_vlist, color))
-            #gl.glPopMatrix()
-            if tile["drivable"] && sim.draw_curve
-                # Find curve with largest dotproduct with heading
-                curves = _get_tile(_grid(sim), i, j)["curves"]
-                curve_headings = curves[end, :, :] .- curves[1, :, :]
-                curve_headings = curve_headings / norm(curve_headings)
-                dirVec = get_dir_vec(angle)
-                dot_prods = map(i->dot(curve_headings[:, i], dirVec), 1:size(curve_heading, 2))
+        # Bind the appropriate texture
+        #texture.bind()
 
-                # Current ("closest") curve drawn in Red
-                pts = curves[:, :, argmax(dot_prods)]
-                bezier_draw(pts, 20, true)
+        road_vlist = sim._map._grid.road_vlist
+        road_vlist = transform_mat(road_vlist, trans_mat)
+        scene = vcat(scene, triangulate_faces(road_vlist, color))
+        #gl.glPopMatrix()
+        if tile["drivable"] && sim.draw_curve
+            # Find curve with largest dotproduct with heading
+            curves = _get_tile(_grid(sim), i, j)["curves"]
+            curve_headings = curves[end, :, :] .- curves[1, :, :]
+            curve_headings = curve_headings / norm(curve_headings)
+            dirVec = get_dir_vec(angle)
+            dot_prods = map(i->dot(curve_headings[:, i], dirVec), 1:size(curve_heading, 2))
 
-                pts = _get_curve(_grid(sim), i, j)
-                len_pts = length(pts)
-                if len_pts > 0
-                    function draw(idx)
-                        idx == argmax(dot_prods) && return
-                        bezier_draw(pts[idx], 20)
-                    end
-                    map(i->draw(i), 1:len_pts)
+            # Current ("closest") curve drawn in Red
+            pts = curves[:, :, argmax(dot_prods)]
+            bezier_draw(pts, 20, true)
+
+            pts = _get_curve(_grid(sim), i, j)
+            len_pts = length(pts)
+            if len_pts > 0
+                function draw(idx)
+                    idx == argmax(dot_prods) && return
+                    bezier_draw(pts[idx], 20)
                 end
+                map(i->draw(i), 1:len_pts)
             end
         end
     end
+    
+    driver_fn(j) = map(i->fn(i, j), 1:sim._map._grid.grid_width)
+    # For each grid tile
+    map(j->driver_fn(j), 1:sim._map._grid.grid_height)
                         
     # For each object
     objs = _objects(sim)
