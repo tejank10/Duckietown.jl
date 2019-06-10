@@ -1195,6 +1195,7 @@ function _render_img(sim::Simulator, top_down=true)
 
             # Bind the appropriate texture
             #texture.bind()
+            #=
             road_vlist = sim._map._grid.road_vlist
             road_vlist = transform_mat(road_vlist, trans_mat)
             scene = vcat(scene, triangulate_faces(road_vlist, color))
@@ -1218,6 +1219,7 @@ function _render_img(sim::Simulator, top_down=true)
                     bezier_draw(pt, 20)
                 end
             end
+            =#
         end
     end
     #=
