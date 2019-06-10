@@ -1179,13 +1179,12 @@ function _render_img(sim::Simulator, top_down=true)
         tile = _get_tile(_grid(sim), i, j)
             
         (ismissing(tile) || isnothing(tile)) && return
-          
+        #=
         # kind = tile['kind']
         angle = tile["angle"]
         color = tile["color"]
         texture = tile["texture"]
-        nothing
-        #=
+        
         pos = [(i-0.5f0), 0f0, (j-0.5f0)] * _road_tile_size(sim)
         #gl.glPushMatrix()
         trans_mat = translation_mat(pos)
