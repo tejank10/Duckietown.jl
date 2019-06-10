@@ -1224,7 +1224,7 @@ function _render_img(sim::Simulator, top_down=true)
     end
 
     # For each object
-    for (idx, obj) in enumerate(_objects(sim))
+    for obj in _objects(sim)
         #TODO: put in scene
         scene = vcat(scene, render(obj, sim.draw_bbox))
     end
@@ -1282,7 +1282,7 @@ function _render_img(sim::Simulator, top_down=true)
     # Note: this is necessary for gym.wrappers.Monitor to record videos
     # properly, otherwise they are vertically inverted.
     #img_array = np.ascontiguousarray(np.flip(img_array, axis=0))
-    =#
+    
     return scene, cam
 end
 
