@@ -1176,14 +1176,13 @@ function _render_img(sim::Simulator, top_down=true)
     #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
     
     # For each grid tile
-    #=
     for j in 1:sim._map._grid.grid_height
         for i in 1:sim._map._grid.grid_width
             # Get the tile type and angle
             tile = _get_tile(_grid(sim), i, j)
-
-            ismissing(tile) && continue
-           
+            
+            (ismissing(tile) || isnothing(tile)) && continue
+            #=
             # kind = tile['kind']
             angle = tile["angle"]
             color = tile["color"]
@@ -1220,6 +1219,7 @@ function _render_img(sim::Simulator, top_down=true)
                     bezier_draw(pt, 20)
                 end
             end
+            =#
         end
     end
 
