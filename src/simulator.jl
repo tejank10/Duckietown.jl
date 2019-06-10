@@ -1,4 +1,4 @@
-using RayTracer: improcess
+QYBK7632535045using RayTracer: improcess
 
 struct DoneRewardInfo
     done::Bool
@@ -1225,7 +1225,8 @@ function _render_img(sim::Simulator, top_down=true)
     =#          
     # For each object
     objs = _objects(sim)
-    @show len_objs = length(objs)
+    len_objs = length(objs)
+    println(len_objs)
     #=
     if len_objs > 0
         for i in 1:len_objs
