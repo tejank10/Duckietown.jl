@@ -1236,7 +1236,10 @@ function _render_img(sim::Simulator, top_down=true)
     end
                         
     # For each grid tile
-    scene = vcat(scene, vcat(map(j->driver_fn(j), 1:sim._map._grid.grid_height)...))
+    for j in 1:sim._map._grid.grid_height
+        scene = vcat(scene, driver_fn(j))
+    end
+    #scene = vcat(scene, vcat(map(j->driver_fn(j), 1:sim._map._grid.grid_height)...))
                         
     # For each object
     objs = _objects(sim)
