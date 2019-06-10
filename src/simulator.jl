@@ -1182,7 +1182,7 @@ function _render_img(sim::Simulator, top_down=true)
             tile = _get_tile(_grid(sim), i, j)
 
             isnothing(tile) && continue
-
+            #=
             # kind = tile['kind']
             angle = tile["angle"]
             color = tile["color"]
@@ -1195,7 +1195,7 @@ function _render_img(sim::Simulator, top_down=true)
 
             # Bind the appropriate texture
             #texture.bind()
-            #=
+            
             road_vlist = sim._map._grid.road_vlist
             road_vlist = transform_mat(road_vlist, trans_mat)
             scene = vcat(scene, triangulate_faces(road_vlist, color))
