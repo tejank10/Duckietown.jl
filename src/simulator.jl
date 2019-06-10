@@ -1196,11 +1196,9 @@ function _render_img(sim::Simulator, top_down=true)
         
         road_vlist = sim._map._grid.road_vlist
         road_vlist = transform_mat(road_vlist, trans_mat)
-        return 1
-        #=
         return triangulate_faces(road_vlist, color)
         #gl.glPopMatrix()
-        
+        #=
         if tile["drivable"] && sim.draw_curve
             # Find curve with largest dotproduct with heading
             curves = _get_tile(_grid(sim), i, j)["curves"]
