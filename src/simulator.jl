@@ -1225,7 +1225,7 @@ function _render_img(sim::Simulator, top_down=true)
         =#
     end
     
-    driver_fn(j) = vcat(map(i->fn(i, j), 1:sim._map._grid.grid_width)...)
+    driver_fn(j) = vcat(filter(x->!isnothing(x), map(i->fn(i, j), 1:sim._map._grid.grid_width))...)
     # For each grid tile
     scene = vcat(scene, vcat(map(j->driver_fn(j), 1:sim._map._grid.grid_height)...))
                         
