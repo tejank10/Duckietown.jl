@@ -1219,9 +1219,8 @@ function _render_img(sim::Simulator, top_down=true)
                 end
             end
         end
-        =#
     end
-
+    =#
     # For each object
     for (idx, obj) in enumerate(_objects(sim))
         #TODO: put in scene
