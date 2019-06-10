@@ -1228,8 +1228,10 @@ function _render_img(sim::Simulator, top_down=true)
     len_objs = length(objs)
     
     if len_objs > 0
-        for i in 1:len_objs
+        i = 1
+        while i <= len_objs
             scene = vcat(scene, render(objs[i], sim.draw_bbox))
+            i += 1
         end
     end
     
