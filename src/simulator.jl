@@ -1174,7 +1174,7 @@ function _render_img(sim::Simulator, top_down=true)
     #gl.glEnable(gl.GL_TEXTURE_2D)
     #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
     #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
-    
+
     # For each grid tile
     for j in 1:sim._map._grid.grid_height
         for i in 1:sim._map._grid.grid_width
@@ -1312,7 +1312,7 @@ function render_obs(sim::Simulator)
         light_pos = Vec3([-40f0], [200f0], [100f0])
     end
 
-    light = PointLight(Vec3([1f0]), 1f12, light_pos)#DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))
+    light = DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))
 
     origin, direction = get_primary_rays(cam)
 
