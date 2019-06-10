@@ -1229,7 +1229,7 @@ function _render_img(sim::Simulator, top_down=true)
         #TODO: put in scene
         scene = vcat(scene, render(objs[i], sim.draw_bbox))
     end
-    =#
+    
     # Draw the agent's own bounding box
     if sim.draw_bbox
         #corners = get_agent_corners(pos, angle)
