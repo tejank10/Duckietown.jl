@@ -1176,6 +1176,8 @@ function _render_img(sim::Simulator, top_down=true)
     #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
     
     function fn(i, j)
+        return 1
+        #=
         tile = _get_tile(_grid(sim), i, j)
             
         (ismissing(tile) || isnothing(tile)) && return
@@ -1197,7 +1199,7 @@ function _render_img(sim::Simulator, top_down=true)
         road_vlist = transform_mat(road_vlist, trans_mat)
         scene = vcat(scene, triangulate_faces(road_vlist, color))
         #gl.glPopMatrix()
-        #=
+        
         if tile["drivable"] && sim.draw_curve
             # Find curve with largest dotproduct with heading
             curves = _get_tile(_grid(sim), i, j)["curves"]
