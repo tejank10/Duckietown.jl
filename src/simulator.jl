@@ -581,7 +581,8 @@ function reset!(sim::Simulator)
     for tile in _grid(sim)._grid
         rng = sim.domain_rand ? sim.rng : nothing
         # Randomize the tile texture
-        tile["texture"] = Graphics.get(tile["kind"], rng)
+        # TODO: Texture
+        #tile["texture"] = Graphics.get(tile["kind"], rng)
 
         # Random tile color multiplier
         tile["color"] = _perturb(sim, Vec3([1f0]), 0.2f0)
@@ -1179,11 +1180,11 @@ function _render_img(sim::Simulator, top_down=true)
         tile = _get_tile(_grid(sim), i, j)
             
         (ismissing(tile) || isnothing(tile)) && return
-        #=
+       
         # kind = tile['kind']
         angle = tile["angle"]
         color = tile["color"]
-        texture = tile["texture"]
+        #texture = tile["texture"]
         
         pos = [(i-0.5f0), 0f0, (j-0.5f0)] * _road_tile_size(sim)
         #gl.glPushMatrix()
@@ -1195,9 +1196,9 @@ function _render_img(sim::Simulator, top_down=true)
 
         road_vlist = sim._map._grid.road_vlist
         road_vlist = transform_mat(road_vlist, trans_mat)
-        scene = vcat(scene, triangulate_faces(road_vlist, color))
+        return triangulate_faces(road_vlist, color)
         #gl.glPopMatrix()
-        
+        #=
         if tile["drivable"] && sim.draw_curve
             # Find curve with largest dotproduct with heading
             curves = _get_tile(_grid(sim), i, j)["curves"]
@@ -1223,9 +1224,9 @@ function _render_img(sim::Simulator, top_down=true)
         =#
     end
     
-    driver_fn(j) = map(i->fn(i, j), 1:sim._map._grid.grid_width)
+    driver_fn(j) = vcat(map(i->fn(i, j), 1:sim._map._grid.grid_width)...)
     # For each grid tile
-    map(j->driver_fn(j), 1:sim._map._grid.grid_height)
+    scene = vcat(scene, vcat(map(j->driver_fn(j), 1:sim._map._grid.grid_height)...))
                         
     # For each object
     objs = _objects(sim)
