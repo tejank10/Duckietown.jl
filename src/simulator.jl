@@ -1184,12 +1184,13 @@ function _render_img(sim::Simulator, top_down=true)
         angle = tile["angle"]
         color = tile["color"]
         texture = tile["texture"]
-
+        nothing
+        #=
         pos = [(i-0.5f0), 0f0, (j-0.5f0)] * _road_tile_size(sim)
         #gl.glPushMatrix()
         trans_mat = translation_mat(pos)
         trans_mat = rotate_mat(angle * 90f0) * trans_mat
-        #=
+        
         # Bind the appropriate texture
         #texture.bind()
 
