@@ -1176,7 +1176,10 @@ function _render_img(sim::Simulator, top_down=true)
     #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
     #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
     
-    function fn(i, j)
+    function fn(_j)
+        j = _j ÷ sim._map._grid.grid_height + 1
+        i = _j % sim._map._grid.grid_height + 1
+        
         tile = _get_tile(_grid(sim), i, j)
             
         (ismissing(tile) || isnothing(tile)) && return
@@ -1224,17 +1227,10 @@ function _render_img(sim::Simulator, top_down=true)
         end
         =#
     end
-
-    function driver_fn(_j)
-        tris_vec = []
-        j = _j ÷ sim._map._grid.grid_height + 1
-        i = _j % sim._map._grid.grid_height + 1
-        return fn(i, j)
-    end
                         
     # For each grid tile
     len = sim._map._grid.grid_height * sim._map._grid.grid_width - 1
-    scene = vcat(scene, filter(x->!isnothing(x), map(j->driver_fn(j), 0:len))...)
+    scene = vcat(scene, filter(x->!isnothing(x), map(j->fn(j), 0:len))...)
     
     #scene = vcat(scene, vcat(map(j->driver_fn(j), 1:sim._map._grid.grid_height)...))
                         
