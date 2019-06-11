@@ -246,7 +246,7 @@ function bezier_tangent(cps, t)
     p += 6(1-t) * t * (cps[3,:] - cps[2,:])
     p += 3(t^2) * (cps[4,:] - cps[3,:])
 
-    p ./= norm(p)
+    p = p ./ norm(p)
 
     return p
 end

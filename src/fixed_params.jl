@@ -1,4 +1,4 @@
-mutable struct FixedSimParams
+mutable struct FixedSimParams <: RayTracer.FixedParams
     rng::MersenneTwister
     _map::Map
     max_steps::Int              # Maximum number of steps per episode

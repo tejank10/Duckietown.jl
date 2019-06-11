@@ -5,6 +5,7 @@ using Space
 using Distributions
 using Random
 using RayTracer
+using Zygote
 
 include("utils.jl")
 

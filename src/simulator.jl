@@ -1,4 +1,4 @@
-using RayTracer: FixedParams
+using RayTracer: FixedParams, @diffops
 
 struct DoneRewardInfo
     done::Bool
@@ -122,6 +122,8 @@ mutable struct Simulator
     timestamp::Float32
     fixedparams::FixedSimParams
 end
+
+@diffops Simulator
 
 function Simulator(
         map_name::String=DEFAULT_MAP_NAME,
@@ -661,6 +663,8 @@ function get_agent_info(sim::Simulator)
     misc["Simulator"] = info
     return misc
 end
+
+Zygote.@nograd get_agent_info
 
 #=
 function cartesian_from_weird(sim::Simulator, pos, angle)
