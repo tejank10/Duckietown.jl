@@ -1234,10 +1234,9 @@ function _render_img(sim::Simulator, top_down=true)
     for i in range
         tris = fn(i)
         if !isnothing(tris)
-            tri_vecs =  vcat(tri_vecs, tris)
+            scene =  vcat(scene, tris)
         end
     end
-    scene = vcat(scene, tri_vecs)
     
     #scene = vcat(scene, vcat(map(j->driver_fn(j), 1:sim._map._grid.grid_height)...))
                         
