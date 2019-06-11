@@ -16,6 +16,7 @@ include("objmesh.jl")
 include("objects.jl")
 include("map.jl")
 include("randomization/randomizer.jl")
+include("fixed_params.jl")
 include("simulator.jl")
 
 

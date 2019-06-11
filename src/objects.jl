@@ -156,7 +156,7 @@ function scale_mat(scale::Vector{Float32})
         0f0 1f0 0f0 0f0;
         0f0 0f0 1f0 0f0;
         0f0 0f0 0f0 1f0]
-    
+
     return mat .* scale_
 end
 
@@ -234,7 +234,7 @@ function step!(wobj::WorldObj, delta_time)
     ##
     #Use a motion model to move the object in the world
     ##
-    !sim.static && throw(NotImplementedError)
+    !wobj.static && throw(NotImplementedError)
 end
 
 
@@ -270,42 +270,6 @@ function DuckiebotObj(obj, domain_rand, safety_radius_mult, wheel_dist,
 
     DuckiebotObj(wobj, follow_dist, velocity, max_iterations, gain, trim,
                  radius, k, limit, wheel_dist, robot_width, robot_length)
-end
-
-# FIXME: this does not follow the same signature as WorldOb
-function step!(db_obj::DuckiebotObj, delta_time, closest_curve_point, objects)
-    ##
-    #Take a step, implemented as a PID controller
-    ##
-
-    # Find the curve point closest to the agent, and the tangent at that point
-    closest_point, closest_tangent = closest_curve_point(db_obj.wobj.pos, db_obj.wobj.angle)
-
-    iterations = 0
-
-    lookup_distance = db_obj.follow_dist
-    curve_point = nothing
-    while iterations < db_obj.max_iterations
-        # Project a point ahead along the curve tangent,
-        # then find the closest point to to that
-        follow_point = closest_point .+ closest_tangent * lookup_distance
-        curve_point, _ = closest_curve_point(follow_point, db_obj.wobj.angle)
-
-        # If we have a valid point on the curve, stop
-        isnothing(curve_point) && break
-
-        iterations += 1
-        lookup_distance *= 0.5
-    end
-
-    # Compute a normalized vector to the curve point
-    point_vec = curve_point .- db_obj.wobj.pos
-    point_vec ./= norm(point_vec)
-
-    dot = dot(get_right_vec(db_obj, db_obj.wobj.angle), point_vec)
-    steering = db_obj.gain * (-dot)
-
-    _update_pos(db_obj, [db_obj.velocity, steering], delta_time)
 end
 
 function get_dir_vec(db_obj::DuckiebotObj, angle)
