@@ -1230,7 +1230,9 @@ function _render_img(sim::Simulator, top_down=true)
                         
     # For each grid tile
     len = sim._map._grid.grid_height * sim._map._grid.grid_width - 1
-    scene = vcat(scene, map(j->fn(j), 0:len)...)
+    tri_vecs = map(j->fn(j), 0:len)
+    tri_vecs_filtered = filter(tri_vec->!isnothing(tri_vec), tri_vecs)
+    scene = vcat(scene, tri_vecs_filtered...)
     
     #scene = vcat(scene, vcat(map(j->driver_fn(j), 1:sim._map._grid.grid_height)...))
                         
