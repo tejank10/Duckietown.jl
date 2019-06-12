@@ -142,7 +142,7 @@ function Simulator(map_name::String=DEFAULT_MAP_NAME, max_steps::Int=DEFAULT_MAX
 
     done = false
     sim = Simulator(last_action, wheelVels, speed, cur_pos, cur_angle,
-                    step_count, timestamp, fp)
+                    step_count, timestamp, fp, done)
 
     sim.done = _compute_done_reward(sim, sim.cur_pos, sim.cur_angle)
     # Initialize the state
