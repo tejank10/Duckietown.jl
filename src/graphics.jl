@@ -228,10 +228,10 @@ function bezier_point(cps, t)
     #B(t) = (1-t)^3 * P0 + 3t(1-t)^2 * P1 + 3t^2(1-t) * P2 + t^3 * P3
     ##
 
-    p  = ((1-t)^3) * cps[1,:]
-    p .+= 3t * ((1-t)^2) * cps[2,:]
-    p .+= 3(t^2) * (1-t) * cps[3,:]
-    p .+= (t^3) * cps[4,:]
+    p = ((1-t)^3) * cps[1,:]
+    p = p .+ 3t * ((1-t)^2) * cps[2,:]
+    p = p .+ 3(t^2) * (1-t) * cps[3,:]
+    p = p .+ (t^3) * cps[4,:]
 
     return p
 end
@@ -246,7 +246,7 @@ function bezier_tangent(cps, t)
     p += 6(1-t) * t * (cps[3,:] - cps[2,:])
     p += 3(t^2) * (cps[4,:] - cps[3,:])
 
-    p ./= norm(p)
+    p = p ./ norm(p)
 
     return p
 end

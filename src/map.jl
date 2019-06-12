@@ -232,7 +232,7 @@ function _get_curve(grid, i, j, width, height, road_tile_size)
         # Generate all four sides' curves,
         # with 3-points template above
         for rot in 0:3
-            mat = gen_rot_matrix([0, 1, 0], rot * π / 2)
+            mat = gen_rot_matrix([0f0, 1f0, 0f0], rot * π / 2)
             pts_new = map(x -> x * mat, pts)
             add_vec = [(i + 0.5) * road_tile_size 0 (j + 0.5) * road_tile_size;]
             pts_new = map(x-> x .+ add_vec, pts_new)
@@ -258,21 +258,21 @@ function _get_curve(grid, i, j, width, height, road_tile_size)
         pts = map(x -> x .+ add_vec, pts)
     end
 
-    return cat(pts...,dims=3)
+    return cat(pts..., dims=3)
 end
 
 struct Grid
-    road_tile_size
+    road_tile_size::Float32
     grid_width::Int
     grid_height::Int
     _grid::Vector
     obj_data::ObjectData
-    road_vlist
+    road_vlist::Matrix{Float32}
     road_tlist
-    ground_vlist
-    drivable_tiles
-    mesh
-    start_tile
+    ground_vlist::Matrix{Float32}
+    drivable_tiles::Vector{Dict}
+    mesh::ObjectMesh
+    start_tile::Union{Nothing,Dict}
 end
 
 

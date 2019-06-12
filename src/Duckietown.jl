@@ -5,6 +5,7 @@ using Space
 using Distributions
 using Random
 using RayTracer
+using Zygote
 
 include("utils.jl")
 
@@ -16,6 +17,7 @@ include("objmesh.jl")
 include("objects.jl")
 include("map.jl")
 include("randomization/randomizer.jl")
+include("fixed_params.jl")
 include("simulator.jl")
 
 
