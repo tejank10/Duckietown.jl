@@ -292,6 +292,8 @@ function _valid_pose(fsp::FixedSimParams, pos, angle, safety_factor=1f0)
     return res
 end
 
+Zygote.@nograd _valid_pose 
+
 function _collision(fsp::FixedSimParams, agent_corners)
     ##
     #Tensor-based OBB Collision detection
