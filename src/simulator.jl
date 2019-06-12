@@ -144,7 +144,7 @@ function Simulator(map_name::String=DEFAULT_MAP_NAME, max_steps::Int=DEFAULT_MAX
     sim = Simulator(last_action, wheelVels, speed, cur_pos, cur_angle,
                     step_count, timestamp, fp, done)
 
-    sim.done = _compute_done_reward(sim, sim.cur_pos, sim.cur_angle)
+    sim.done = _compute_done_reward(sim).done
     # Initialize the state
     return sim
 end
@@ -170,7 +170,7 @@ function reset!(sim::Simulator)
     # Robot's current speed
     sim.speed = 0f0
 
-    sim.done = _compute_done_reward(sim, sim.cur_pos, sim.cur_angle)
+    sim.done = _compute_done_reward(sim).done
     # Generate the first camera image
     obs = render_obs(sim)
 end
@@ -635,8 +635,7 @@ function step!(sim::Simulator, action::Vector{Float32})
     s = render_obs(sim)
     misc = get_agent_info(sim)
 
-    d = _compute_done_reward(sim)
-    sim.done = d.done
+    sim.done = _compute_done_reward(sim).done
     misc["Simulator"]["msg"] = d.done_why
     return s, action, d.reward, sim.done, misc
 end
