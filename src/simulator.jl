@@ -122,6 +122,7 @@ mutable struct Simulator
     step_count::Int
     timestamp::Float32
     fixedparams::FixedSimParams
+    done::Bool
 end
 
 @diffops Simulator
@@ -138,9 +139,12 @@ function Simulator(map_name::String=DEFAULT_MAP_NAME, max_steps::Int=DEFAULT_MAX
 
     # Robot's current speed
     speed = 0f0
+
+    done = false
     sim = Simulator(last_action, wheelVels, speed, cur_pos, cur_angle,
                     step_count, timestamp, fp)
 
+    sim.done = _compute_done_reward(sim, sim.cur_pos, sim.cur_angle)
     # Initialize the state
     return sim
 end
@@ -157,11 +161,16 @@ function reset!(sim::Simulator)
 
     sim.cur_pos, sim.cur_angle = reset!(sim.fixedparams)
 
+    sim.last_action = zeros(Float32, 2)
+    sim.wheelVels = zeros(Float32, 2)
+
+    sim.step_count = 0
+    sim.timestamp = 0f0
+
     # Robot's current speed
     sim.speed = 0f0
 
-    #logger.info('Starting at %s %s' % (sim.cur_pos, sim.cur_angle))
-
+    sim.done = _compute_done_reward(sim, sim.cur_pos, sim.cur_angle)
     # Generate the first camera image
     obs = render_obs(sim)
 end
@@ -627,8 +636,9 @@ function step!(sim::Simulator, action::Vector{Float32})
     misc = get_agent_info(sim)
 
     d = _compute_done_reward(sim)
+    sim.done = d.done
     misc["Simulator"]["msg"] = d.done_why
-    return s, action, d.reward, d.done, misc
+    return s, action, d.reward, sim.done, misc
 end
 
 function _compute_done_reward(sim::Simulator)
