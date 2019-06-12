@@ -114,9 +114,6 @@ function FixedSimParams(map_name::String=DEFAULT_MAP_NAME,
     # Used by the UndistortWrapper, always initialized to False
     undistort = false
 
-    step_count = 0
-    timestamp = 0f0
-
     # Robot's current speed
     speed = 0f0
 
