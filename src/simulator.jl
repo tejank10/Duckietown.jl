@@ -384,7 +384,7 @@ function closest_curve_point(fp::FixedSimParams, pos, angle)
     curve_headings = curve_headings / norm(curve_headings)
     dir_vec = get_dir_vec(angle)
 
-    dot_prods = [dot(curve_headings[:, i], dir_vec) for i in 1:size(curve_headings, 2)]
+    dot_prods = map(i -> dot(curve_headings[:, i], dir_vec), 1:size(curve_headings, 2))
 
     # Closest curve = one with largest dotprod
     max_idx = argmax(dot_prods)
@@ -410,7 +410,8 @@ function get_lane_pos2(fp::FixedSimParams, pos, angle)
     point, tangent = closest_curve_point(fp, pos, angle)
     if isnothing(point)
         msg = "Point not in lane: $pos"
-        throw(NotInLane(msg))
+        # throw(NotInLane(msg))
+        return LanePosition(0f0, 0f0, 0f0, 0f0)
     end
 
     @assert !isnothing(point)
@@ -702,14 +703,17 @@ function compute_reward(sim::Simulator, pos, angle, speed)
     reward = 0f0
     lp = nothing
     # Get the position relative to the right lane tangent
-    try
-        lp = get_lane_pos2(sim.fixedparams, pos, angle)
+    lp = get_lane_pos2(sim.fixedparams, pos, angle)
+
+    #=
     catch y
         if isa(y, NotInLane)
             reward = 40f0 * col_penalty
             return reward
         end
     end
+    =#
+
     # Compute the reward
     reward = (
             speed * lp.dot_dir -
@@ -720,7 +724,7 @@ function compute_reward(sim::Simulator, pos, angle, speed)
 end
 
 function step!(sim::Simulator, action::Vector{Float32})
-    action = clamp.(action, -1f0, 1f0)
+    # action = clamp.(action, -1f0, 1f0)
 
     for _ in 1:sim.fixedparams.frame_skip
         update_physics(sim, action)
