@@ -1,4 +1,5 @@
 using RayTracer: FixedParams, @diffops
+import Base: +, *, -
 
 struct DoneRewardInfo
     done::Bool
