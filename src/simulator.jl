@@ -635,7 +635,8 @@ function step!(sim::Simulator, action::Vector{Float32})
     s = render_obs(sim)
     misc = get_agent_info(sim)
 
-    sim.done = _compute_done_reward(sim).done
+    d = _compute_done_reward(sim)
+    sim.done = d.done
     misc["Simulator"]["msg"] = d.done_why
     return s, action, d.reward, sim.done, misc
 end
