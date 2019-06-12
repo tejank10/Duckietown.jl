@@ -94,9 +94,6 @@ function FixedSimParams(map_name::String=DEFAULT_MAP_NAME,
 
     reward_range = (-1000, 1000)
 
-    last_action = zeros(Float32, 2)
-    wheelVels = zeros(Float32, 2)
-
     # Distortion params, if so, load the library, only if not bbox mode
     distortion = distortion && !draw_bbox
     camera_model = nothing
@@ -407,7 +404,7 @@ function _valid_pose(fsp::FixedSimParams, pos, angle, safety_factor=1f0)
     return res
 end
 
-Zygote.@nograd _valid_pose 
+Zygote.@nograd _valid_pose
 
 function _collision(fsp::FixedSimParams, agent_corners)
     ##
