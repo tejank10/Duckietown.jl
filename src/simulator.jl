@@ -1,4 +1,5 @@
-using RayTracer: FixedParams
+using RayTracer: FixedParams, @diffops
+import Base: +, *, -
 
 struct DoneRewardInfo
     done::Bool
@@ -122,6 +123,8 @@ mutable struct Simulator
     timestamp::Float32
     fixedparams::FixedSimParams
 end
+
+@diffops Simulator
 
 function Simulator(
         map_name::String=DEFAULT_MAP_NAME,
@@ -662,6 +665,8 @@ function get_agent_info(sim::Simulator)
     return misc
 end
 
+Zygote.@nograd get_agent_info
+
 #=
 function cartesian_from_weird(sim::Simulator, pos, angle)
     gx, gy, gz = pos
@@ -902,7 +907,10 @@ function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
     end
 
     # For each object
-    scene = vcat(scene, map(obj->render(obj, fp.draw_bbox), _objects(fp))...)
+    objs = _objects(fp)
+    if length(objs) > 0
+        scene = vcat(scene, map(obj->render(obj, fp.draw_bbox), _objects(fp))...)
+    end
 
     # Draw the agent's own bounding box
     if fp.draw_bbox
