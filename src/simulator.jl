@@ -907,7 +907,10 @@ function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
     end
 
     # For each object
-    scene = vcat(scene, map(obj->render(obj, fp.draw_bbox), _objects(fp))...)
+    objs = _objects(fp)
+    if length(objs) > 0
+        scene = vcat(scene, map(obj->render(obj, fp.draw_bbox), _objects(fp))...)
+    end
 
     # Draw the agent's own bounding box
     if fp.draw_bbox
