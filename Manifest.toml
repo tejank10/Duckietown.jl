@@ -230,7 +230,7 @@ version = "0.4.0"
 deps = ["InteractiveUtils", "MacroTools", "Test"]
 git-tree-sha1 = "4d0c6647aa89b3678d03967ca11c8a5cdc83d2b5"
 repo-rev = "master"
-repo-url = "https://github.com/MikeInnes/IRTools.jl"
+repo-url = "https://github.com/MikeInnes/IRTools.jl.git"
 uuid = "7869d1d1-7146-5819-86e3-90919afe41df"
 version = "0.2.1"
 
@@ -454,7 +454,7 @@ version = "0.3.1"
 
 [[RayTracer]]
 deps = ["Distributed", "Flux", "IRTools", "Images", "Zygote"]
-git-tree-sha1 = "0445e91cf6314e21632d9a760c1e742a7739155f"
+git-tree-sha1 = "e58ac058e9f502aeda2590f3108d0282b69c7647"
 repo-rev = "master"
 repo-url = "https://github.com/avik-pal/RayTracer.jl"
 uuid = "60dacb86-48ff-11e9-0f01-03ab8794bbc9"
@@ -550,7 +550,7 @@ uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
 version = "0.8.0"
 
 [[SuiteSparse]]
-deps = ["Libdl", "LinearAlgebra", "SparseArrays"]
+deps = ["Libdl", "LinearAlgebra", "Serialization", "SparseArrays"]
 uuid = "4607b0f0-06f3-5cda-b6b1-a6196a1729e9"
 
 [[Test]]
@@ -570,10 +570,9 @@ uuid = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 version = "0.5.0"
 
 [[Tokenize]]
-deps = ["Printf", "Test"]
-git-tree-sha1 = "3e83f60b74911d3042d3550884ca2776386a02b8"
+git-tree-sha1 = "0de343efc07da00cd449d5b04e959ebaeeb3305d"
 uuid = "0796e94c-ce3b-5d07-9a54-7f471281c624"
-version = "0.5.3"
+version = "0.5.4"
 
 [[Tracker]]
 deps = ["Adapt", "DiffRules", "ForwardDiff", "LinearAlgebra", "MacroTools", "NNlib", "NaNMath", "Printf", "Random", "Requires", "SpecialFunctions", "Statistics", "Test"]
@@ -626,8 +625,8 @@ version = "0.8.3"
 
 [[Zygote]]
 deps = ["DiffRules", "FillArrays", "ForwardDiff", "IRTools", "InteractiveUtils", "LinearAlgebra", "MacroTools", "NNlib", "NaNMath", "Random", "Requires", "SpecialFunctions", "Statistics"]
-git-tree-sha1 = "961ce4a291d53bfaee6c25f02ec75bd59d126f61"
+git-tree-sha1 = "1725b1335296ea8da7bcf4222777a7ef5f8d202e"
 repo-rev = "master"
-repo-url = "https://github.com/FluxML/Zygote.jl"
+repo-url = "https://github.com/FluxML/Zygote.jl.git"
 uuid = "e88e6eb3-aa80-5325-afca-941959d7151f"
 version = "0.3.1"

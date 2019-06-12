@@ -262,17 +262,17 @@ function _get_curve(grid, i, j, width, height, road_tile_size)
 end
 
 struct Grid
-    road_tile_size
+    road_tile_size::Float32
     grid_width::Int
     grid_height::Int
     _grid::Vector
     obj_data::ObjectData
-    road_vlist
+    road_vlist::Matrix{Float32}
     road_tlist
-    ground_vlist
-    drivable_tiles
-    mesh
-    start_tile
+    ground_vlist::Matrix{Float32}
+    drivable_tiles::Vector{Dict}
+    mesh::ObjectMesh
+    start_tile::Union{Nothing,Dict}
 end
 
 
