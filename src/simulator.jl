@@ -281,16 +281,15 @@ function closest_curve_point(fp::FixedSimParams, pos, angle)
 
     # Find curve with largest dotproduct with heading
     curves = _get_tile(_grid(fp), i, j)["curves"]
-    curve_headings = curves[end, :, :] .- curves[1, :, :]
+    curve_headings = permutedims(curves[end, :, :] .- curves[1, :, :])
     curve_headings = curve_headings / norm(curve_headings)
     dir_vec = get_dir_vec(angle)
 
-    dot_prods = map(i -> dot(curve_headings[:, i], dir_vec), 1:size(curve_headings, 2))
+    dot_prods = map(i -> dot(curve_headings[i, :], dir_vec), 1:size(curve_headings, 1))
 
     # Closest curve = one with largest dotprod
     max_idx = argmax(dot_prods)
     cps = curves[:, :, max_idx]
-
     # Find closest point and tangent to this curve
     t = bezier_closest(cps, pos)
     point = bezier_point(cps, t)
@@ -793,11 +792,11 @@ function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
             if tile["drivable"] && fp.draw_curve
                 # Find curve with largest dotproduct with heading
                 curves = _get_tile(_grid(fp), i, j)["curves"]
-                curve_headings = curves[end, :, :] .- curves[1, :, :]
+                curve_headings = permutedims(curves[end, :, :] .- curves[1, :, :])
                 curve_headings = curve_headings / norm(curve_headings)
-                dirVec = get_dir_vec(angle)
+                dirVec = get_dir_vec(30f0)
                 dot_prods = map(i->dot(curve_headings[:, i], dirVec), 1:size(curve_heading, 2))
-
+                @show dot_prods
                 # Current ("closest") curve drawn in Red
                 pts = curves[:, :, argmax(dot_prods)]
                 bezier_draw(pts, 20, true)

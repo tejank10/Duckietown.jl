@@ -234,7 +234,7 @@ function _get_curve(grid, i, j, width, height, road_tile_size)
         for rot in 0:3
             mat = gen_rot_matrix([0f0, 1f0, 0f0], rot * π / 2)
             pts_new = map(x -> x * mat, pts)
-            add_vec = [(i + 0.5) * road_tile_size 0 (j + 0.5) * road_tile_size;]
+            add_vec = [(i - 0.5f0) * road_tile_size 0 (j - 0.5f0) * road_tile_size;]
             pts_new = map(x-> x .+ add_vec, pts_new)
             push!(fourway_pts, pts_new...)
         end
@@ -254,7 +254,7 @@ function _get_curve(grid, i, j, width, height, road_tile_size)
     else
         mat = gen_rot_matrix([0f0, 1f0, 0f0], angle * π / 2)
         pts = map(x -> x * mat, pts)
-        add_vec = [(i-0.5f0) 0f0 (j + 0.5f0);] * road_tile_size
+        add_vec = [(i-0.5f0) 0f0 (j - 0.5f0);] * road_tile_size
         pts = map(x -> x .+ add_vec, pts)
     end
 
