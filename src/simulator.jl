@@ -615,12 +615,12 @@ function compute_reward(sim::Simulator, pos, angle, speed)
     =#
 
     # Compute the reward
-    reward = -lp.angle_rad - lp.dist ^ 2 + speed
-    #reward = (
-    #        speed * lp.dot_dir -
-    #        10f0 * abs(lp.dist) +
-    #        40f0 * col_penalty
-    #)
+    #reward = -lp.angle_rad - lp.dist ^ 2 + speed
+    reward = (
+            speed * lp.dot_dir -
+            10f0 * abs(lp.dist) +
+            40f0 * col_penalty
+    )
     return reward
 end
 
