@@ -122,6 +122,7 @@ mutable struct Simulator
     step_count::Int
     timestamp::Float32
     fixedparams::FixedSimParams
+    scene::Vector{Triangle}
     done::Bool
 end
 
@@ -141,11 +142,12 @@ function Simulator(map_name::String=DEFAULT_MAP_NAME, max_steps::Int=DEFAULT_MAX
     speed = 0f0
 
     done = false
+
+    scene = draw_ground_road(fp)
     sim = Simulator(last_action, wheelVels, speed, cur_pos, cur_angle,
-                    step_count, timestamp, fp, done)
+                    step_count, timestamp, fp, scene, done)
 
     sim.done = _compute_done_reward(sim).done
-    # Initialize the state
     return sim
 end
 
@@ -282,7 +284,7 @@ function closest_curve_point(fp::FixedSimParams, pos, angle)
     # Find curve with largest dotproduct with heading
     curves = _get_tile(_grid(fp), i, j)["curves"]
     curve_headings = permutedims(curves[end, :, :] .- curves[1, :, :])
-    curve_headings = curve_headings / norm(curve_headings)
+    curve_headings = Float32.(curve_headings / norm(curve_headings))
     dir_vec = get_dir_vec(angle)
 
     dot_prods = map(i -> dot(curve_headings[i, :], dir_vec), 1:size(curve_headings, 1))
@@ -297,6 +299,9 @@ function closest_curve_point(fp::FixedSimParams, pos, angle)
 
     return point, tangent
 end
+
+# This is a hack to avoid using try-catch and NotInLane errors
+is_inlane(lp::LanePosition) = !(lp.dot_dir == lp.dist == lp.angle_deg == lp.angle_rad == 0f0)
 
 function get_lane_pos2(fp::FixedSimParams, pos, angle)
     ##
@@ -337,7 +342,6 @@ function get_lane_pos2(fp::FixedSimParams, pos, angle)
     end
 
     angle_deg = rad2deg(angle_rad)
-    # return signedDist, dotDir, angle_deg
 
     return LanePosition(signedDist, dotDir, angle_deg, angle_rad)
 end
@@ -550,12 +554,6 @@ function get_agent_info(sim::Simulator)
         info["cur_angle"] = float(angle)
         info["wheel_velocities"] = [sim.wheelVels...]
 
-        # put in cartesian coordinates
-        # (0,0 is bottom left)
-        # q = self.cartesian_from_weird(self.cur_pos, self.)
-        # info['cur_pos_cartesian'] = [float(p[0]), float(p[1])]
-        # info['egovehicle_pose_cartesian'] = {'~SE2Transform': {'p': [float(p[0]), float(p[1])],
-        #                                                        'theta': angle}}
 
         info["timestamp"] = sim.timestamp
         info["tile_coords"] = [get_grid_coords(_road_tile_size(sim), pos)]
@@ -568,54 +566,12 @@ end
 
 Zygote.@nograd get_agent_info
 
-#=
-function cartesian_from_weird(sim::Simulator, pos, angle)
-    gx, gy, gz = pos
-    grid_height = self.grid_height
-    tile_size = sim.road_tile_size
-
-    # this was before but obviously doesn't work for grid_height = 1
-    # cp = [gx, (grid_height - 1) * tile_size - gz]
-    cp = [gx, grid_height * tile_size - gz]
-
-    #TODO
-    return geometry.SE2_from_translation_angle(cp, angle)
-end
-
-function weird_from_cartesian(self, q: np.ndarray)
-    #TODO
-    cp, angle = geometry.translation_angle_from_SE2(q)
-
-    gx = cp[1]
-    gy = 0
-    # cp[1] = (grid_height - 1) * tile_size - gz
-    grid_height = sim.grid_height
-    tile_size = sim.road_tile_size
-    # this was before but obviously doesn't work for grid_height = 1
-    # gz = (grid_height - 1) * tile_size - cp[1]
-    gz = grid_height * tile_size - cp[2]
-    return [gx, gy, gz], angle
-end
-=#
 function compute_reward(sim::Simulator, pos, angle, speed)
     # Compute the collision avoidance penalty
     col_penalty = _proximity_penalty2(sim, pos, angle)
-    reward = 0f0
-    lp = nothing
     # Get the position relative to the right lane tangent
     lp = get_lane_pos2(sim.fixedparams, pos, angle)
 
-    #=
-    catch y
-        if isa(y, NotInLane)
-            reward = 40f0 * col_penalty
-            return reward
-        end
-    end
-    =#
-
-    # Compute the reward
-    #reward = -lp.angle_rad - lp.dist ^ 2 + speed
     reward = (
             speed * lp.dot_dir -
             10f0 * abs(lp.dist) +
@@ -665,6 +621,62 @@ function _compute_done_reward(sim::Simulator)
     return DoneRewardInfo(done, msg, reward, done_code)
 end
 
+function draw_ground_road(fp::FixedSimParams)
+    # Draw the ground quad
+    scene = []
+    trans_mat = scale_mat([50f0, 1f0, 50f0])
+    ground_vlist = transform_mat(_grid(fp).ground_vlist, trans_mat)
+    ground_scene = triangulate_faces(ground_vlist, fp.ground_color)
+    scene =  vcat(scene, ground_scene)
+
+    grid_width, grid_height = _grid(fp).grid_width, _grid(fp).grid_height
+
+    # For each grid tile
+    for j in 1:grid_height
+        for i in 1:grid_width
+            # Get the tile type and angle
+            tile = _get_tile(_grid(fp), i, j)
+
+            isnothing(tile) && continue
+
+            # kind = tile['kind']
+            angle = tile["angle"]
+            color = tile["color"]
+            #texture = tile["texture"]
+
+            pos = [(i-0.5f0), 0f0, (j-0.5f0)] * _road_tile_size(fp)
+            trans_mat = translation_mat(pos)
+            trans_mat = rotate_mat(angle * 90f0) * trans_mat
+
+            # Bind the appropriate texture
+            road_vlist = _grid(fp).road_vlist
+            road_vlist = transform_mat(road_vlist, trans_mat)
+            scene = vcat(scene, triangulate_faces(road_vlist, color))
+            if tile["drivable"] && fp.draw_curve
+                # Find curve with largest dotproduct with heading
+                curves = _get_tile(_grid(fp), i, j)["curves"]
+                curve_headings = permutedims(curves[end, :, :] .- curves[1, :, :])
+                curve_headings = curve_headings / norm(curve_headings)
+                dirVec = get_dir_vec(angle)
+                dot_prods = map(i->dot(curve_headings[:, i], dirVec), 1:size(curve_heading, 2))
+                dot_prods
+                # Current ("closest") curve drawn in Red
+                pts = curves[:, :, argmax(dot_prods)]
+                bezier_draw(pts, 20, true)
+
+                pts = _get_curve(_grid(fp), i, j)
+                for (idx, pt) in enumerate(pts)
+                    # Don't draw current curve in blue
+                    idx == argmax(dot_prods) && continue
+                    bezier_draw(pt, 20)
+                end
+            end
+        end
+    end
+
+    return scene
+end
+
 function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
     ##
     #Render an image of the environment into a frame buffer
@@ -673,39 +685,7 @@ function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
 
     !fp.graphics && return
     scene = []
-    #=
-    # Switch to the default context
-    # This is necessary on Linux nvidia drivers
-    # pyglet.gl._shadow_window.switch_to()
-    self.shadow_window.switch_to()
 
-    from pyglet import gl
-    # Bind the multisampled frame buffer
-    gl.glEnable(gl.GL_MULTISAMPLE)
-    gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, multi_fbo)
-    gl.glViewport(0, 0, width, height)
-
-    # Clear the color and depth buffers
-
-    c0, c1, c2 = self.horizon_color
-    gl.glClearColor(c0, c1, c2, 1.0)
-    gl.glClearDepth(1.0)
-    gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-
-    # Set the projection matrix
-    gl.glMatrixMode(gl.GL_PROJECTION)
-    gl.glLoadIdentity()
-    gl.gluPerspective(
-            self.cam_fov_y,
-            width / float(height),
-            0.04,
-            100.0
-    )
-
-    # Set modelview matrix
-    # Note: we add a bit of noise to the camera position for data augmentation
-    =#
-    #logger.info('Pos: %s angle %s' % (self.cur_pos, self.cur_angle))
     pos, angle = cur_pos, cur_angle
     if fp.domain_rand
         pos = pos .+ fp.randomization_settings["camera_noise"]
@@ -714,16 +694,10 @@ function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
     x, y, z = pos .+ fp.cam_offset
     dx, dy, dz = get_dir_vec(angle)
 
-    #trans_mat = Matrix{Float32}(I, 4, 4)
     if fp.draw_bbox
         y += 0.8f0
-    #    trans_mat = rotate_mat(90f0, 1, 0, 0)
     elseif !top_down
         y += fp.cam_height
-    #    trans_mat = rotate_mat(sim.cam_angle[1], (1, 0, 0))
-    #    trans_mat = rotate_mat(sim.cam_angle[2], (0, 1, 0)) * trans_mat
-    #    trans_mat = rotate_mat(sim.cam_angle[3], (0, 0, 1)) * trans_mat
-    #    trans_mat = translation_mat([0f0, 0f0, _perturb(sim, CAMERA_FORWARD_DIST)]) * trans_mat
     end
 
     cam = nothing
@@ -744,72 +718,6 @@ function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
         target = Vec3([x+dx], [y+dy], [z+dz])
         vup = Vec3([0f0], [1f0], [0f0])
         cam = Camera(eye, target, vup, fp.cam_fov_y, 1f0, cam_width, cam_height)
-    end
-
-
-    # Draw the ground quad
-    #gl.glDisable(gl.GL_TEXTURE_2D)
-    #gl.glColor3f(*sim.ground_color)
-    #gl.glPushMatrix()
-    trans_mat = scale_mat([50f0, 1f0, 50f0])
-    ground_vlist = transform_mat(_grid(fp).ground_vlist, trans_mat)
-    ground_scene = triangulate_faces(ground_vlist, fp.ground_color)
-    scene =  vcat(scene, ground_scene)
-    # TODO: triangulate this ground vlist and put in scene
-    #gl.glPopMatrix()
-
-    # Draw the ground/noise triangles
-    #self.tri_vlist.draw(gl.GL_TRIANGLES)
-
-    # Draw the road quads
-    #gl.glEnable(gl.GL_TEXTURE_2D)
-    #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
-    #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
-
-    # For each grid tile
-    for j in 1:grid_height
-        for i in 1:grid_width
-            # Get the tile type and angle
-            tile = _get_tile(_grid(fp), i, j)
-
-            isnothing(tile) && continue
-
-            # kind = tile['kind']
-            angle = tile["angle"]
-            color = tile["color"]
-            #texture = tile["texture"]
-
-            pos = [(i-0.5f0), 0f0, (j-0.5f0)] * _road_tile_size(fp)
-            #gl.glPushMatrix()
-            trans_mat = translation_mat(pos)
-            trans_mat = rotate_mat(angle * 90f0) * trans_mat
-
-            # Bind the appropriate texture
-            #texture.bind()
-            road_vlist = _grid(fp).road_vlist
-            road_vlist = transform_mat(road_vlist, trans_mat)
-            scene = vcat(scene, triangulate_faces(road_vlist, color))
-            #gl.glPopMatrix()
-            if tile["drivable"] && fp.draw_curve
-                # Find curve with largest dotproduct with heading
-                curves = _get_tile(_grid(fp), i, j)["curves"]
-                curve_headings = permutedims(curves[end, :, :] .- curves[1, :, :])
-                curve_headings = curve_headings / norm(curve_headings)
-                dirVec = get_dir_vec(30f0)
-                dot_prods = map(i->dot(curve_headings[:, i], dirVec), 1:size(curve_heading, 2))
-                @show dot_prods
-                # Current ("closest") curve drawn in Red
-                pts = curves[:, :, argmax(dot_prods)]
-                bezier_draw(pts, 20, true)
-
-                pts = _get_curve(_grid(fp), i, j)
-                for (idx, pt) in enumerate(pts)
-                    # Don't draw current curve in blue
-                    idx == argmax(dot_prods) && continue
-                    bezier_draw(pt, 20)
-                end
-            end
-        end
     end
 
     # For each object
@@ -839,40 +747,24 @@ function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
         #gl.glPopMatrix()
     end
 
-    # Resolve the multisampled frame buffer into the final frame buffer
-    #gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, multi_fbo)
-    #gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, final_fbo)
-    #gl.glBlitFramebuffer(
-    #        0, 0,
-    #        width, height,
-    #        0, 0,
-    #        width, height,
-    #        gl.GL_COLOR_BUFFER_BIT,
-    #        gl.GL_LINEAR
-    #)
-
-    # Copy the frame buffer contents into a numpy array
-    # Note: glReadPixels reads starting from the lower left corner
-    #gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, final_fbo)
-    #gl.glReadPixels(
-    #        0,
-    #        0,
-    #        width,
-    #        height,
-    #        gl.GL_RGB,
-    #        gl.GL_UNSIGNED_BYTE,
-    #        img_array.ctypes.data_as(POINTER(gl.GLubyte))
-    #)
-
-    # Unbind the frame buffer
-    #gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0)
-
-    # Flip the image because OpenGL maps (0,0) to the lower-left corner
-    # Note: this is necessary for gym.wrappers.Monitor to record videos
-    # properly, otherwise they are vertically inverted.
     #img_array = np.ascontiguousarray(np.flip(img_array, axis=0))
 
     return scene, cam
+end
+
+function viewable_scene(scene::Vector{Triangle}, pos, angle)
+    dirVec = get_dir_vec(angle)
+    dirVec = Vec3(dirVec[1:1], dirVec[2:2], dirVec[3:3])
+    new_scene = []
+    for tri in scene
+        dot_prods = [RayTracer.dot(tri.v1 - pos, dirVec),
+                     RayTracer.dot(tri.v2 - pos, dirVec),
+                     RayTracer.dot(tri.v3 - pos, dirVec)]
+        if !all(i -> all(i .< 0f0), dot_prods)
+            new_scene = vcat(new_scene, tri)
+        end
+    end
+    return new_scene
 end
 
 function render_obs(sim::Simulator)
@@ -889,6 +781,8 @@ function render_obs(sim::Simulator)
             false
     )
 
+    # Take only the viewable triangles for rendering
+    observation = vcat(observation, viewable_scene(sim.scene, sim.cur_pos, sim.cur_angle))
     # self.undistort - for UndistortWrapper
     #NOTE: Not distorting as of now
     #if sim.distortion && !sim.undistort

@@ -301,12 +301,9 @@ function reset!(fsp::FixedSimParams)
         invalid && continue
 
         # If the angle is too far away from the driving direction, retry
-        lp = nothing
-        try
-            lp = get_lane_pos2(fsp, propose_pos, propose_angle)
-        catch y
-            isa(y, NotInLane) && continue
-        end
+        lp = get_lane_pos2(fsp, propose_pos, propose_angle)
+
+        !is_inlane(lp) && continue
 
         M = fsp.accept_start_angle_deg
         ok = -M < lp.angle_deg < +M

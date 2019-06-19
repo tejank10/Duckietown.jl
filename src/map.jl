@@ -133,94 +133,94 @@ function _get_curve(grid, i, j, width, height, road_tile_size)
 
     if startswith(kind, "straight")
         pts = [
-                [-0.2f0 0 -0.50f0;
-                 -0.2f0 0 -0.25f0;
-                 -0.2f0 0  0.25f0;
-                 -0.2f0 0  0.50f0],
+                [-0.2f0 0f0 -0.50f0;
+                 -0.2f0 0f0 -0.25f0;
+                 -0.2f0 0f0  0.25f0;
+                 -0.2f0 0f0  0.50f0],
 
-                [0.2f0 0  0.50f0;
-                 0.2f0 0  0.25f0;
-                 0.2f0 0 -0.25f0;
-                 0.2f0 0 -0.50f0],
+                [0.2f0 0f0  0.50f0;
+                 0.2f0 0f0  0.25f0;
+                 0.2f0 0f0 -0.25f0;
+                 0.2f0 0f0 -0.50f0],
               ] .* road_tile_size
 
     elseif kind == "curve_left"
         pts = [
-                [-0.2f0 0 -0.5f0;
-                 -0.2f0 0  0.0f0;
-                  0.0f0 0  0.2f0;
-                  0.5f0 0  0.2f0],
+                [-0.2f0 0f0 -0.5f0;
+                 -0.2f0 0f0  0.0f0;
+                  0.0f0 0f0  0.2f0;
+                  0.5f0 0f0  0.2f0],
 
-                [0.5f0 0 -0.2f0;
-                 0.3f0 0 -0.2f0;
-                 0.2f0 0 -0.3f0;
-                 0.2f0 0 -0.5f0],
+                [0.5f0 0f0 -0.2f0;
+                 0.3f0 0f0 -0.2f0;
+                 0.2f0 0f0 -0.3f0;
+                 0.2f0 0f0 -0.5f0],
               ] .* road_tile_size
 
     elseif kind == "curve_right"
         pts = [
-                [-0.2f0 0 -0.5f0;
-                 -0.2f0 0 -0.2f0;
-                 -0.3f0 0 -0.2f0;
-                 -0.5f0 0 -0.2f0],
+                [-0.2f0 0f0 -0.5f0;
+                 -0.2f0 0f0 -0.2f0;
+                 -0.3f0 0f0 -0.2f0;
+                 -0.5f0 0f0 -0.2f0],
 
-                [-0.5f0 0  0.2f0;
-                 -0.3f0 0  0.2f0;
-                  0.3f0 0  0.0f0;
-                  0.2f0 0 -0.5f0],
+                [-0.5f0 0f0  0.2f0;
+                 -0.3f0 0f0  0.2f0;
+                  0.3f0 0f0  0.0f0;
+                  0.2f0 0f0 -0.5f0],
               ] .* road_tile_size
 
     # Hardcoded all curves for 3way intersection
     elseif startswith(kind, "3way")
         pts = [
-                [-0.2f0 0 -0.50f0;
-                 -0.2f0 0 -0.25f0;
-                 -0.2f0 0  0.25f0;
-                 -0.2f0 0  0.50f0],
+                [-0.2f0 0f0 -0.50f0;
+                 -0.2f0 0f0 -0.25f0;
+                 -0.2f0 0f0  0.25f0;
+                 -0.2f0 0f0  0.50f0],
 
-                [-0.2f0 0 -0.5f0;
-                 -0.2f0 0  0.0f0;
-                  0.0f0 0  0.2f0;
-                  0.5f0 0  0.2f0],
+                [-0.2f0 0f0 -0.5f0;
+                 -0.2f0 0f0  0.0f0;
+                  0.0f0 0f0  0.2f0;
+                  0.5f0 0f0  0.2f0],
 
-                [0.2f0 0  0.50f0;
-                 0.2f0 0  0.25f0;
-                 0.2f0 0 -0.25f0;
-                 0.2f0 0 -0.50f0],
+                [0.2f0 0f0  0.50f0;
+                 0.2f0 0f0  0.25f0;
+                 0.2f0 0f0 -0.25f0;
+                 0.2f0 0f0 -0.50f0],
 
-                [0.5f0 0 -0.2f0;
-                 0.3f0 0 -0.2f0;
-                 0.2f0 0 -0.2f0;
-                 0.2f0 0 -0.5f0],
+                [0.5f0 0f0 -0.2f0;
+                 0.3f0 0f0 -0.2f0;
+                 0.2f0 0f0 -0.2f0;
+                 0.2f0 0f0 -0.5f0],
 
-                [0.2f0 0 0.5f0;
-                 0.2f0 0 0.2f0;
-                 0.3f0 0 0.2f0;
-                 0.5f0 0 0.2f0],
+                [0.2f0 0f0 0.5f0;
+                 0.2f0 0f0 0.2f0;
+                 0.3f0 0f0 0.2f0;
+                 0.5f0 0f0 0.2f0],
 
-                [ 0.5f0 0 -0.2f0;
-                  0.3f0 0 -0.2f0;
-                 -0.2f0 0  0.0f0;
-                 -0.2f0 0  0.5f0],
+                [ 0.5f0 0f0 -0.2f0;
+                  0.3f0 0f0 -0.2f0;
+                 -0.2f0 0f0  0.0f0;
+                 -0.2f0 0f0  0.5f0],
               ] .* road_tile_size
 
     # Template for each side of 4way intersection
     elseif startswith(kind, "4way")
         pts = [
-                [-0.2f0 0 -0.5f0;
-                 -0.2f0 0  0.0f0;
-                  0.0f0 0  0.2f0;
-                  0.5f0 0  0.2f0],
+                [-0.2f0 0f0 -0.5f0;
+                 -0.2f0 0f0  0.0f0;
+                  0.0f0 0f0  0.2f0;
+                  0.5f0 0f0  0.2f0],
 
-                [-0.2f0 0 -0.50f0;
-                 -0.2f0 0 -0.25f0;
-                 -0.2f0 0  0.25f0;
-                 -0.2f0 0  0.50f0],
+                [-0.2f0 0f0 -0.50f0;
+                 -0.2f0 0f0 -0.25f0;
+                 -0.2f0 0f0  0.25f0;
+                 -0.2f0 0f0  0.50f0],
 
-                [-0.2f0 0 -0.5f0;
-                 -0.2f0 0 -0.2f0;
-                 -0.3f0 0 -0.2f0;
-                 -0.5f0 0 -0.2f0],
+                [-0.2f0 0f0 -0.5f0;
+                 -0.2f0 0f0 -0.2f0;
+                 -0.3f0 0f0 -0.2f0;
+                 -0.5f0 0f0 -0.2f0],
               ] .* road_tile_size
     else
         @assert false kind
@@ -232,9 +232,9 @@ function _get_curve(grid, i, j, width, height, road_tile_size)
         # Generate all four sides' curves,
         # with 3-points template above
         for rot in 0:3
-            mat = gen_rot_matrix([0f0, 1f0, 0f0], rot * π / 2)
+            mat = gen_rot_matrix([0f0, 1f0, 0f0], rot * π / 2f0)
             pts_new = map(x -> x * mat, pts)
-            add_vec = [(i - 0.5f0) * road_tile_size 0 (j - 0.5f0) * road_tile_size;]
+            add_vec = [(i - 0.5f0) * road_tile_size 0f0 (j - 0.5f0) * road_tile_size;]
             pts_new = map(x-> x .+ add_vec, pts_new)
             push!(fourway_pts, pts_new...)
         end
@@ -243,7 +243,7 @@ function _get_curve(grid, i, j, width, height, road_tile_size)
     # Hardcoded each curve; just rotate and shift
     elseif startswith(kind, "3way")
         threeway_pts = []
-        mat = gen_rot_matrix([0f0, 1f0, 0f0], angle * π / 2)
+        mat = gen_rot_matrix([0f0, 1f0, 0f0], angle * π / 2f0)
         #NOTE: pts is 3D matrix, find a work around if * does not work
         pts_new = map(x -> x * mat, pts)
         add_vec = [(i - 0.5f0) 0f0 (j - 0.5f0);] * road_tile_size
@@ -252,7 +252,7 @@ function _get_curve(grid, i, j, width, height, road_tile_size)
 
         return cat(threeway_pts..., dims=3)
     else
-        mat = gen_rot_matrix([0f0, 1f0, 0f0], angle * π / 2)
+        mat = gen_rot_matrix([0f0, 1f0, 0f0], angle * π / 2f0)
         pts = map(x -> x * mat, pts)
         add_vec = [(i-0.5f0) 0f0 (j - 0.5f0);] * road_tile_size
         pts = map(x -> x .+ add_vec, pts)
