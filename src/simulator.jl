@@ -755,6 +755,7 @@ end
 function viewable_scene(scene::Vector{Triangle}, pos, angle)
     dirVec = get_dir_vec(angle)
     dirVec = Vec3(dirVec[1:1], dirVec[2:2], dirVec[3:3])
+    pos = Vec3(pos[1:1], pos[2:2], pos[3:3])
     new_scene = []
     for tri in scene
         # If angle between a vertex and bot is > π/2, it can't see that vertex.
