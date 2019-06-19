@@ -757,6 +757,10 @@ function viewable_scene(scene::Vector{Triangle}, pos, angle)
     dirVec = Vec3(dirVec[1:1], dirVec[2:2], dirVec[3:3])
     new_scene = []
     for tri in scene
+        # If angle between a vertex and bot is > π/2, it can't see that vertex.
+        # angle > π/2 => cos is -ve
+        # If all vertices of a triangle make an angle > π/2 with the bot,
+        # that triangle is not visible to the bot.
         dot_prods = [RayTracer.dot(tri.v1 - pos, dirVec),
                      RayTracer.dot(tri.v2 - pos, dirVec),
                      RayTracer.dot(tri.v3 - pos, dirVec)]
