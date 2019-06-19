@@ -766,7 +766,7 @@ function viewable_scene(scene::Vector{Triangle}, pos, angle)
                      RayTracer.dot(tri.v2 - pos, dirVec),
                      RayTracer.dot(tri.v3 - pos, dirVec)]
         if !all(i -> all(i .< 0f0), dot_prods)
-            new_scene = vcat(new_scene, tri)
+            new_scene = vcat(new_scene, [tri])
         end
     end
     return new_scene
