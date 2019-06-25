@@ -1,7 +1,7 @@
 module ObjMesh
 
 include("utils.jl")
-using RayTracer: Vec3, PlainColor
+using RayTracer: Vec3, parse_mtllib!
 
 cache = Dict()
 
@@ -13,9 +13,9 @@ mutable struct ObjectMesh
     ##
     min_coords::Vector{Float32}
     max_coords::Vector{Float32}
-    vlists
-    clists
-    textures
+    vlists::Vector{Array{Float32, 3}}
+    clists::Vector{Vector{Vec3}}
+    textures::Vector{Union{Vec3, Nothing}}
 end
 
 function ObjectMesh(file_path::String)
@@ -42,9 +42,9 @@ function ObjectMesh(file_path::String)
     materials = _load_mtl(file_path)
     mesh_file = open(file_path, "r")
 
-    verts = []
-    texs = []
-    normals = []
+    verts = Vector{Vector{Float32}}()
+    texs = Vector{Vector{Float32}}()
+    normals = Vector{Vector{Float32}}()
     faces = []
 
     cur_mtl = ""
@@ -91,7 +91,7 @@ function ObjectMesh(file_path::String)
         if prefix == "f"
             @assert length(tokens) == 3 "only triangle faces are supported"
 
-            face = []
+            face = Vector{Vector{Int}}()
             for token in tokens
                 indices = filter(t -> t != "", split(token, '/'))
                 indices = map(i -> parse(Int, i), indices)
@@ -135,7 +135,7 @@ function ObjectMesh(file_path::String)
     list_verts = zeros(Float32, 3, 3, num_faces)
     list_norms = zeros(Float32, 3, 3, num_faces)
     list_texcs = zeros(Float32, 3, 2, num_faces)
-    list_colors = Vector{PlainColor}()
+    list_colors = Vector{Vec3}()
 
     # For each triangle
     for (f_idx, face) in enumerate(faces)
@@ -143,7 +143,8 @@ function ObjectMesh(file_path::String)
 
         # Get the color for this face
         f_mtl = materials[mtl_name]
-        f_color = !isempty(f_mtl) ? f_mtl["Kd"] : rgb(1f0)
+        #NOTE: May get some failure/error here because of else condition
+        f_color = !isempty(f_mtl) ? f_mtl.color_diffuse : rgb(1f0)
 
         # For each tuple of indices
         for (l_idx, indices) in enumerate(face)
@@ -158,7 +159,7 @@ function ObjectMesh(file_path::String)
                 v_idx, n_idx = indices
                 vert = verts[v_idx]
                 normal = normals[n_idx]
-                texc = [0, 0]
+                texc = [0f0, 0f0]
             end
 
             list_verts[l_idx, :, f_idx] .= vert
@@ -188,13 +189,16 @@ function ObjectMesh(file_path::String)
     max_coords = minimum(maximum(list_verts, dims=3), dims=1)[1, :, 1]
 
     # Vertex list, one per chunk
-    vlists = []
+    vlists = Vector{Array{Float32, 3}}()
+
+    # Texture Coordinates list corresponding to vlist
+    texclists = Vector{Array{Float32, 3}}()
 
     # Color list
-    clists = []
+    clists = Vector{Vector{Vec3}}()
 
     # Textures, one per chunk
-    textures = []
+    textures = Vector{Union{Vec3, Nothing}}()
 
     # For each chunk
     for chunk in chunks
@@ -214,9 +218,10 @@ function ObjectMesh(file_path::String)
 
         mtl = chunk["mtl"]
 
-        texture = "map_Kd" ∈ keys(mtl) ? load_texture(mtl["map_Kd"]) : nothing
+        texture = mtl.texture_diffuse
 
         push!(vlists, list_verts[:, :, start_idx:end_idx])
+        push!(texclists, list_texcs[:, :, start_idx:end_idx])
         push!(clists, list_colors[start_idx:end_idx])
         push!(textures, texture)
     end
@@ -242,72 +247,36 @@ end
 
 
 function _load_mtl(model_file::String)
-    model_dir, file_name = splitdir(model_file) .* ""
+    texture_diffuse = nothing
 
-    # Create a default material for the model
-    default_mtl = Dict([
-        "Kd"=> PlainColor(Vec3([0f0], [0f0], [1f0]))
-    ])
+    model_dir, file_name = splitdir(model_file) .* ""
 
     # Determine the default texture path for the default material
     tex_name = split(file_name, '.')[1] * ""
     tex_path = get_file_path("src/textures", tex_name, "png")
     if isdir(tex_path)
-        default_mtl["map_Kd"] = tex_path
+        texture_diffuse = load_texture(tex_path)
     end
 
-    materials = Dict([
-        ""=> default_mtl
-    ])
+    materials = Dict{String, Union{NamedTuple,Nothing}}([
+        # This is default material
+        ""=> (color_diffuse = Vec3([0f0], [0f0], [1f0]),
+              color_ambient = Vec3(1.0f0),
+              color_specular = Vec3(1.0f0),
+              specular_exponent = 50.0f0,
+              texture_ambient = nothing,
+              texture_diffuse = texture_diffuse,
+              texture_specular = nothing)
+        ])
 
     mtl_path = split(model_file, '.')[1] * ".mtl"
 
-    !isdir(mtl_path) && (return materials)
-
-    #logger.debug('loading materials from "%s"' % mtl_path)
-
-    mtl_file = open(mtl_path, "r")
-
-    cur_mtl = nothing
-
-    # For each line of the input file
-    for line in mtl_file
-        line = rstrip(line, " \r\n")
-
-        # Skip comments
-        (startswith(line, '#') || line == "") && continue
-
-        tokens = split(line, ' ')
-        tokens = map(t -> strip(t, ' '), tokens)
-        tokens = collect(filter(t -> t != "", tokens))
-
-        prefix = tokens[1]
-        tokens = tokens[2:end]
-
-        if prefix == "newmtl"
-            cur_mtl = Dict()
-            materials[tokens[1]] = cur_mtl
-        end
-
-        # Diffuse color
-        if prefix == "Kd"
-            vals = map(v -> Float32(v), tokens)
-            cur_mtl["Kd"] = vals
-        end
-
-        # Texture file name
-        if prefix == "map_Kd"
-            tex_file = tokens[end]
-            tex_file = join(model_dir, tex_file)
-            cur_mtl["map_Kd"] = tex_file
-        end
+    if isdir(mtl_path)
+        parse_mtllib!(mtl_path, materials, Float32)
     end
-
-    close(mtl_file)
 
     return materials
 end
-
 
 function render(obj_mesh::ObjectMesh)
     for (idx, vlist) in enumerate(obj_mesh.vlists)

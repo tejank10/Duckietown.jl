@@ -7,7 +7,7 @@ struct ObjectData
     collidable_safety_radii
 end
 
-function ObjectData(map_data::Dict, road_tile_size, domain_rand, grid)
+function ObjectData(map_data::Dict, road_tile_size::Float32, domain_rand::Bool, grid)
     # Create the objects array
     objects = []
 
@@ -32,11 +32,11 @@ function ObjectData(map_data::Dict, road_tile_size, domain_rand, grid)
     for (obj_idx, desc) in enumerate(get(map_data, "objects", []))
         kind = desc["kind"]
 
-        pos = desc["pos"]
+        pos = Float32.(desc["pos"])
         x, z = pos[1:2]
         y = length(pos) == 3 ? pos[3] : 0f0
 
-        rotate = desc["rotate"]
+        rotate = Float32(desc["rotate"])
         optional = get(desc, "optional", false)
 
         pos = road_tile_size * [x, y, z]
@@ -46,10 +46,11 @@ function ObjectData(map_data::Dict, road_tile_size, domain_rand, grid)
         mesh = ObjMesh.get(kind)
 
         if "height" in keys(desc)
-            scale = desc["height"] / mesh.max_coords[2]
+            scale = Float32(desc["height"]) / mesh.max_coords[2]
         else
-            sscale = desc["scale"]
+            scale = Float32(desc["scale"])
         end
+
         @assert !("height" ∈ keys(desc) && "scale" ∈ keys(desc)) "cannot specify both height and scale"
 
         static = get(desc, "static", true)
@@ -295,6 +296,40 @@ function _get_tile(grid, i, j, width, height)
     return nothing
 end
 
+function _init_vlists(road_tile_size)
+    # Create the vertex list for our road quad
+    # Note: the vertices are centered around the origin so we can easily
+    # rotate the tiles about their center
+    half_size = road_tile_size / 2f0
+    verts = [
+        -half_size 0f0 -half_size;
+         half_size 0f0 -half_size;
+         half_size 0f0  half_size;
+        -half_size 0f0  half_size;
+    ]
+    texCoords = [
+        1f0 0f0;
+        0f0 0f0;
+        0f0 1f0;
+        1f0 1f0
+    ]
+
+    road_vlist = verts
+    road_tlist = texCoords
+
+    # Create the vertex list for the ground quad
+    verts = [
+        -1 -0.8f0  1;
+        -1 -0.8f0 -1;
+         1 -0.8f0 -1;
+         1 -0.8f0  1
+    ]
+
+    ground_vlist = verts
+
+    return road_vlist, road_tlist, ground_vlist
+end
+
 function Grid(map_data::Dict, domain_rand)
     if "tile_size" ∉ keys(map_data)
         msg = "Must now include explicit tile_size in the map data."
@@ -319,7 +354,7 @@ function Grid(map_data::Dict, domain_rand)
 
     # For each row in the grid
     for (j, row) ∈ enumerate(tiles)
-        msg = "each row of tiles must hMatrixave the same length"
+        msg = "each row of tiles must have the same length"
         if length(row) != grid_width
             error(msg)
         end
