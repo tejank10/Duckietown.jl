@@ -2,6 +2,8 @@ module Graphics
 # List of textures available for a given path
 
 using LinearAlgebra
+using Images
+using RayTracer
 
 include("utils.jl")
 
@@ -36,42 +38,22 @@ function get(tex_name::String, rng=nothing)
 
     if path ∉ keys(tex_cache)
         #TODO
-        tex_cache[path] = []#Texture(load_texture(path))
+        tex_cache[path] = load_texture(path)
     end
 
     return tex_cache[path]
 end
 
-function load_texture(color)
-    PlainColor(color)
+function load_texture(tex_path::String)
+    Vec3([Float32.(permutedims(channelview(load(tex_path)),
+        (3, 2, 1)))[:,end:-1:1,i]  for i in 1:3]...)
 end
+
 #=
 function bind(tex::Texture)
         from pyglet import gl
         gl.glBindTexture(self.tex.target, self.tex.id)
 end
-
-function load_texture(tex_path)
-    from pyglet import gl
-    #logger.debug('loading texture "%s"' % os.path.basename(tex_path))
-    import pyglet
-    img = pyglet.image.load(tex_path)
-    tex = img.get_texture()
-    gl.glEnable(tex.target)
-    gl.glBindTexture(tex.target, tex.id)
-    gl.glTexImage2D(
-        gl.GL_TEXTURE_2D,
-        0,
-        gl.GL_RGB,
-        img.width,
-        img.height,
-        0,
-        gl.GL_RGBA,
-        gl.GL_UNSIGNED_BYTE,
-        img.get_image_data().get_data('RGBA', img.width * 4)
-    )
-
-    return tex
 
 def create_frame_buffers(width, height, num_samples):
     """Create the frame buffer objects"""

@@ -236,7 +236,7 @@ function reset!(fsp::FixedSimParams)
         rng = fsp.domain_rand ? fsp.rng : nothing
         # Randomize the tile texture
         # comment till textures are implemented
-        #tile["texture"] = Graphics.get(tile["kind"], rng)
+        tile["texture"] = Graphics.get(tile["kind"], fsp.rng)
 
         # Random tile color multiplier
         tile["color"] = _perturb(fsp, Vec3([1f0]), 0.2f0)

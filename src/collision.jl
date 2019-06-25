@@ -55,7 +55,8 @@ function is_between_ordered(val, lowerbound, upperbound)
     return all(lowerbound .≤ val .≤ upperbound)
 end
 
-function generate_corners(pos, min_coords, max_coords, θ, scale)
+function generate_corners(pos::Vector{Float32}, min_coords::Vector{Float32},
+                          max_coords::Vector{Float32}, θ::Float32, scale::Float32)
     ##
     #Generates corners given obj pos, extents, scale, and rotation
     ##
@@ -70,7 +71,7 @@ function generate_corners(pos, min_coords, max_coords, θ, scale)
 end
 
 
-function tile_corners(pos, width)
+function tile_corners(pos::Vector{Float32}, width::Float32)
     ##
     #Generates the absolute corner coord for a tile, given grid pos and tile width
     ##
@@ -86,7 +87,7 @@ function tile_corners(pos, width)
 end
 
 
-function generate_norm(corners)
+function generate_norm(corners::Array{Float32, 2})
     ##
     #Generates both (orthogonal, 1 per axis) normal vectors
     #for rectangle given vertices *in a particular order* (see generate_corners)

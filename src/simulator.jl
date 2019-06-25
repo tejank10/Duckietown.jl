@@ -234,40 +234,6 @@ _full_transparency(fp::FixedSimParams) = fp.full_transparency
 _full_transparency(sim::Simulator) = _full_transparency(sim.fixedparams)
 
 
-function _init_vlists(road_tile_size)
-    # Create the vertex list for our road quad
-    # Note: the vertices are centered around the origin so we can easily
-    # rotate the tiles about their center
-    half_size = road_tile_size / 2f0
-    verts = [
-        -half_size 0f0 -half_size;
-         half_size 0f0 -half_size;
-         half_size 0f0  half_size;
-        -half_size 0f0  half_size
-    ]
-    texCoords = [
-        1f0 0f0;
-        0f0 0f0;
-        0f0 1f0;
-        1f0 1f0
-    ]
-
-    road_vlist = verts
-    road_tlist = texCoords
-
-    # Create the vertex list for the ground quad
-    verts = [
-        -1 -0.8f0  1;
-        -1 -0.8f0 -1;
-         1 -0.8f0 -1;
-         1 -0.8f0  1
-    ]
-
-    ground_vlist = verts
-
-    return road_vlist, road_tlist, ground_vlist
-end
-
 function closest_curve_point(fp::FixedSimParams, pos, angle)
     ##
     #    Get the closest point on the curve to a given point
@@ -626,7 +592,7 @@ function draw_ground_road(fp::FixedSimParams)
     scene = []
     trans_mat = scale_mat([50f0, 1f0, 50f0])
     ground_vlist = transform_mat(_grid(fp).ground_vlist, trans_mat)
-    ground_scene = triangulate_faces(ground_vlist, fp.ground_color)
+    ground_scene = triangulate_faces(ground_vlist, nothing, fp.ground_color)
     scene =  vcat(scene, ground_scene)
 
     grid_width, grid_height = _grid(fp).grid_width, _grid(fp).grid_height
@@ -642,7 +608,13 @@ function draw_ground_road(fp::FixedSimParams)
             # kind = tile['kind']
             angle = tile["angle"]
             color = tile["color"]
-            #texture = tile["texture"]
+            texture = (color_diffuse = color,
+                       color_ambient = Vec3(1.0f0),
+                       color_specular = Vec3(1.0f0),
+                       specular_exponent = 50.0f0,
+                       texture_ambient = nothing,
+                       texture_diffuse = tile["texture"],
+                       texture_specular = nothing)
 
             pos = [(i-0.5f0), 0f0, (j-0.5f0)] * _road_tile_size(fp)
             trans_mat = translation_mat(pos)
@@ -650,8 +622,9 @@ function draw_ground_road(fp::FixedSimParams)
 
             # Bind the appropriate texture
             road_vlist = _grid(fp).road_vlist
+            road_tlist = _grid(fp).road_tlist
             road_vlist = transform_mat(road_vlist, trans_mat)
-            scene = vcat(scene, triangulate_faces(road_vlist, color))
+            scene = vcat(scene, triangulate_faces(road_vlist, road_tlist, color, texture))
             if tile["drivable"] && fp.draw_curve
                 # Find curve with largest dotproduct with heading
                 curves = _get_tile(_grid(fp), i, j)["curves"]
