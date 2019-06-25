@@ -6,20 +6,20 @@ abstract type AbstractWorldObj end
 mutable struct WorldObj <: AbstractWorldObj
     visible::Bool
     color::Vec3
-    domain_rand
-    angle
-    y_rot
-    pos
-    scale
-    min_coords
-    max_coords
-    kind
-    mesh
-    optional
-    static
-    safety_radius
-    obj_corners
-    obj_norm
+    domain_rand::Bool
+    angle::Float32
+    y_rot::Float32
+    pos::Vector{Float32}
+    scale::Float32
+    min_coords::Vector{Float32}
+    max_coords::Vector{Float32}
+    kind::String
+    mesh::ObjectMesh
+    optional::Bool
+    static::Bool
+    safety_radius::Float32
+    obj_corners::Array{Float32, 2}
+    obj_norm::Array{Float32, 2}
 end
 
 function WorldObj(obj, domain_rand, safety_radius_mult)
@@ -64,7 +64,7 @@ function process_obj_dict(obj, safety_radius_mult)
             min_coords, max_coords, y_rot)
 end
 
-function render(obj::AbstractWorldObj, draw_bbox)
+function render(obj::AbstractWorldObj, draw_bbox::Bool)
     ##
     #Renders the object to screen
     ##
@@ -91,28 +91,106 @@ function render(obj::AbstractWorldObj, draw_bbox)
     tranformed_vlists = transform_mesh(obj.mesh, transformation_mat)
     #let mesh store a matrix. make vec3 out of it colorcoloronly when you render
     # Skipped texture for now
-    Δed_faces = triangulate_faces.(tranformed_vlists, obj_mesh.clists)
+    Δed_faces = triangulate_faces.(tranformed_vlists, obj_mesh.texclist, obj_mesh.clists, obj_mesh.textures)
     Δed_faces = vcat(Δed_faces...)
     #return TriangleMesh(Δ_ed_faces)
 end
 
-function make_Δ(v1::Vec3, vert2::Vector, vert3::Vector, color::Vec3)
+function make_Δ(v1::Vec3, vert2::Vector{Float32}, vert3::Vector{Float32}, mat::Material)
     v2 = Vec3(vert2[1:1], vert2[2:2], vert2[3:3])
     v3 = Vec3(vert3[1:1], vert3[2:2], vert3[3:3])
-    Triangle(v1, v2, v3; color=color)
+    Triangle(v1, v2, v3, mat)
 end
 
-function triangulate_faces(list_verts::Matrix, color::Vec3)
+function make_Δ(v1::Vec3, vert2::Vector{Float32}, vert3::Vector{Float32},
+                tc1::Vector{Float32}, tc2::Vector{Float32}, tc3::Vector{Float32},
+                texture::NamedTuple)
+    v2 = Vec3(vert2[1:1], vert2[2:2], vert2[3:3])
+    v3 = Vec3(vert3[1:1], vert3[2:2], vert3[3:3])
+
+    uv_coordinates = [tc1, tc2, tc3]
+
+    mat = Material(;uv_coordinates=uv_coordinates, texture...)
+    Triangle(v1, v2, v3, mat)
+end
+
+function make_Δ(v1::Vec3, vert2::Vector{Float32}, vert3::Vector{Float32},
+                tc1::Vector{Float32}, tc2::Vector{Float32}, tc3::Vector{Float32},
+                color::Vec3)
+    v2 = Vec3(vert2[1:1], vert2[2:2], vert2[3:3])
+    v3 = Vec3(vert3[1:1], vert3[2:2], vert3[3:3])
+
+    uv_coordinates = [tc1, tc2, tc3]
+
+    mat = Material(;uv_coordinates=uv_coordinates, color_diffuse=color)
+    Triangle(v1, v2, v3, mat)
+end
+
+function triangulate_faces(list_verts::Matrix{Float32}, texc::Matrix{Float32},
+                           color::Vec3, texture::NamedTuple)
     v1 = Vec3(list_verts[1, 1:1], list_verts[1, 2:2], list_verts[1, 3:3])
     num_verts = size(list_verts, 1)
-    Δs = map(i->make_Δ(v1, list_verts[i, :], list_verts[i+1, :], color), 2:num_verts-1)
+
+    texture_ = (color_diffuse = color,
+                color_ambient = texture.color_ambient,
+                color_specular = texture.color_specular,
+                specular_exponent = texture.specular_exponent,
+                texture_ambient = texture.texture_ambient,
+                texture_diffuse = texture.texture_diffuse,
+                texture_specular = texture.texture_specular)
+
+    Δs = map(i->make_Δ(v1, list_verts[i, :], list_verts[i+1, :], texc[1, :],
+                       texc[i, :], texc[i+1, :], texture_), 2:num_verts-1)
     return Δs
 end
 
-function triangulate_faces(list_verts::AbstractArray{T, 3}, list_colors::Vector{Vec3}) where T
+function triangulate_faces(list_verts::Matrix{Float32}, texc::Matrix{Float32},
+                           color::Vec3, texture::Nothing=nothing)
+    v1 = Vec3(list_verts[1, 1:1], list_verts[1, 2:2], list_verts[1, 3:3])
+    num_verts = size(list_verts, 1)
+
+    Δs = map(i->make_Δ(v1, list_verts[i, :], list_verts[i+1, :], texc[1, :],
+                       texc[i, :], texc[i+1, :], color), 2:num_verts-1)
+    return Δs
+end
+
+function triangulate_faces(list_verts::Matrix{Float32}, texc::Nothing,
+                           color::Vec3, texture::Nothing=nothing)
+    v1 = Vec3(list_verts[1, 1:1], list_verts[1, 2:2], list_verts[1, 3:3])
+    num_verts = size(list_verts, 1)
+
+    mat = Material(;color_diffuse=color)
+
+    Δs = map(i->make_Δ(v1, list_verts[i, :], list_verts[i+1, :], mat), 2:num_verts-1)
+    return Δs
+end
+
+
+function triangulate_faces(list_verts::Matrix{Float32}, texc::Nothing,
+                           color::Vec3, texture::NamedTuple)
+    v1 = Vec3(list_verts[1, 1:1], list_verts[1, 2:2], list_verts[1, 3:3])
+    num_verts = size(list_verts, 1)
+
+    texture_ = (color_diffuse = color,
+                color_ambient = texture.color_ambient,
+                color_specular = texture.color_specular,
+                specular_exponent = texture.specular_exponent,
+                texture_ambient = texture.texture_ambient,
+                texture_diffuse = texture.texture_diffuse,
+                texture_specular = texture.texture_specular)
+
+    mat = Material(;texture_...)
+
+    Δs = map(i->make_Δ(v1, list_verts[i, :], list_verts[i+1, :], mat), 2:num_verts-1)
+    return Δs
+end
+
+function triangulate_faces(list_verts::AbstractArray{T, 3}, list_texc::AbstractArray{T, 3},
+                           list_colors::Vector{Vec3}, list_texs::Vector{Union{NamedTuple,Nothing}}=nothing) where T
     # list_verts: 3D array representing list of faces along 3rd dim.
-    # Every face has 3 vertices. Vertices are along 1st dim. X, Y and Z component
-    # of vertices, along 2nd dim.
+    # Every face has 3 vertices. Vertices are along 1st dim.
+    # X, Y and Z component of vertices, along 2nd dim.
+    # Similarly for texture coordinates
 
     @assert size(list_verts, 1) == 3
     @assert size(list_verts, 3) ==  size(list_colors, 1)
@@ -120,7 +198,8 @@ function triangulate_faces(list_verts::AbstractArray{T, 3}, list_colors::Vector{
     num_faces = size(list_verts, 3)
     vt = Vector{Triangle}()
     for i in 1:num_faces
-        Δ = triangulate_faces(list_verts[:, :, i], list_colors[i])
+        Δ = triangulate_faces(list_verts[:, :, i], list_texc[:, :, i],
+                              list_colors[i], list_texs[i])
         vt = vcat(vt, Δ)
     end
     return vt
@@ -194,13 +273,10 @@ function transform_mat(mat::Matrix{T}, transformation_mat::Matrix{T}) where T
     return (mat_ * transformation_mat)[:, 1:dim]
 end
 
-function tranform_mesh(mesh_mat::AbstractArray{T, 3}, transformation_mat::Matrix{T}) where T
-    trans_vlist = similar(mesh_mat)
-    num_faces = size(mesh_mat, 3)
-    for i in 1:num_faces
-        trans_vlist[:, :, i] .= transform_mat(vlist[:, :, i], transformation_mat)
-    end
-
+function tranform_mesh(vlist::AbstractArray{T, 3}, transformation_mat::Matrix{T}) where T
+    num_faces = size(vlist, 3)
+    trans_vlist = map(i -> transform_mat(vlist[:, :, i], transformation_mat), 1:num_faces)
+    cat(trans_vlist..., dims=3)
     return trans_vlist
 end
 
@@ -254,16 +330,16 @@ mutable struct DuckiebotObj <: AbstractWorldObj
 end
 
 function DuckiebotObj(obj, domain_rand, safety_radius_mult, wheel_dist,
-                      robot_width, robot_length, gain=2.0, trim=0.0,
-                      radius=0.0318, k=27.0, limit=1.0)
+                      robot_width, robot_length, gain=2f0, trim=0f0,
+                      radius=0.0318f0, k=27f0, limit=1f0)
     wobj = WorldObj(obj, domain_rand, safety_radius_mult)
-
+    follow_dist, velocity = nothing, nothing
     if domain_rand
-        follow_dist = rand(Uniform(0.3, 0.4))
-        velocity = rand(Uniform(0.05, 0.15))
+        follow_dist = Float32(rand(Uniform(0.3f0, 0.4f0)))
+        velocity = Float32(rand(Uniform(0.05f0, 0.15f0)))
     else
-        follow_dist = 0.3
-        velocity = 0.1
+        follow_dist = 0.3f0
+        velocity = 0.1f0
     end
 
     max_iterations = 1000
@@ -275,13 +351,13 @@ end
 function get_dir_vec(db_obj::DuckiebotObj, angle)
     x = cos(angle)
     z = -sin(angle)
-    return [x, 0, z]
+    return [x, 0f0, z]
 end
 
 function get_right_vec(db_obj::DuckiebotObj, angle)
     x = sin(angle)
     z = cos(angle)
-    return [x, 0, z]
+    return [x, 0f0, z]
 end
 
 function check_collision(db_obj::DuckiebotObj, agent_corners, agent_norm)
@@ -305,7 +381,7 @@ function proximity(db_obj::DuckiebotObj, agent_pos, agent_safety_rad)
     d = norm(agent_pos .- pos)
     score = d - agent_safety_rad - self.safety_radius
 
-    return min(0, score)
+    return min(0f0, score)
 end
 
 function _update_pos(db_obj::DuckiebotObj, action, deltaTime)
@@ -348,12 +424,12 @@ function _update_pos(db_obj::DuckiebotObj, action, deltaTime)
     # Rotate the robot's position around the center of rotation
     r_vec = get_right_vec(db_obj, db_obj.wobj.angle)
     px, py, pz = db_obj.pos
-    cx = px .+ r * r_vec[1:1]
-    cz = pz .+ r * r_vec[3:3]
-    npx, npz = rotate_point.(px, pz, cx, cz, rotAngle)
+    cx = px + r * r_vec
+    cz = pz + r * r_vec
+    npx, npz = rotate_point(px, pz, cx, cz, rotAngle)
 
     # Update position
-    db_obj.pos = vcat(npx, py, npz)
+    db_obj.pos = [npx, py, npz]
 
     # Update the robot's direction angle
     db_obj.wobj.angle += rotAngle
@@ -390,7 +466,7 @@ function DuckieObj(obj, domain_rand::Bool, safety_radius_mult, walk_distance)
     # Randomize velocity and wait time
     if wobj.domain_rand
         pedestrian_wait_time = rand(3:19)
-        vel = abs(rand(Normal(0.02f0, 0.005f0)))
+        vel = abs(Float32(rand(Normal(0.02f0, 0.005f0))))
     else
         pedestrian_wait_time = 8
         vel = 0.02f0
@@ -404,7 +480,7 @@ function DuckieObj(obj, domain_rand::Bool, safety_radius_mult, walk_distance)
 
     # Walk wiggle parameter
     wiggle = sample([14, 15, 16], 1)
-    wiggle = π ./ wiggle
+    wiggle = Float32(π / wiggle)
 
     time = 0
 

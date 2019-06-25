@@ -272,6 +272,12 @@ git-tree-sha1 = "ea26aea659b889da49f51afe2886358990ef9732"
 uuid = "6a3955dd-da59-5b1f-98d4-e7296123deb5"
 version = "0.6.3"
 
+[[ImageMagick]]
+deps = ["BinaryProvider", "ColorTypes", "FileIO", "FixedPointNumbers", "ImageCore", "InteractiveUtils", "Libdl", "Pkg", "Random"]
+git-tree-sha1 = "2bb39ea007cb81672547d171de3f40b4d6b8ba32"
+uuid = "6218d12a-5da1-5696-b52f-db25d2ecc6d1"
+version = "0.7.4"
+
 [[ImageMetadata]]
 deps = ["AxisArrays", "ColorVectorSpace", "Colors", "FixedPointNumbers", "ImageAxes", "ImageCore", "IndirectArrays"]
 git-tree-sha1 = "6522fdedc8aace8b8dc9f7adc7f6079bc51c86e2"
@@ -461,8 +467,8 @@ version = "0.3.1"
 
 [[RayTracer]]
 deps = ["Distributed", "Flux", "IRTools", "Images", "Zygote"]
-git-tree-sha1 = "e58ac058e9f502aeda2590f3108d0282b69c7647"
-repo-rev = "master"
+git-tree-sha1 = "36686ab3776717d1b54fa35aaa00812eac2a17aa"
+repo-rev = "ap/texture"
 repo-url = "https://github.com/avik-pal/RayTracer.jl"
 uuid = "60dacb86-48ff-11e9-0f01-03ab8794bbc9"
 version = "0.1.0"
