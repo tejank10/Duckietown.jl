@@ -1,7 +1,10 @@
 module ObjMesh
 
+include("graphics.jl")
 include("utils.jl")
+
 using RayTracer: Vec3, parse_mtllib!
+using .Graphics
 
 cache = Dict()
 
@@ -14,6 +17,7 @@ mutable struct ObjectMesh
     min_coords::Vector{Float32}
     max_coords::Vector{Float32}
     vlists::Vector{Array{Float32, 3}}
+    texclists::Vector{Array{Float32, 3}}
     clists::Vector{Vector{Vec3}}
     textures::Vector{Union{Vec3, Nothing}}
 end
@@ -105,7 +109,6 @@ function ObjectMesh(file_path::String)
 
     # Sort the faces by material name
     sort!(faces, by=f->f[2])
-
     # Compute the start and end faces for each chunk in the model
     cur_mtl = nothing
     chunks = []
@@ -125,7 +128,6 @@ function ObjectMesh(file_path::String)
     end
 
     chunks[end]["end_idx"] = length(faces)
-
     num_faces = length(faces)
     # logger.debug('num verts=%d' % len(verts))
     # logger.debug('num faces=%d' % num_faces)
@@ -144,8 +146,8 @@ function ObjectMesh(file_path::String)
         # Get the color for this face
         f_mtl = materials[mtl_name]
         #NOTE: May get some failure/error here because of else condition
-        f_color = !isempty(f_mtl) ? f_mtl.color_diffuse : rgb(1f0)
-
+        #f_color = !isempty(f_mtl) ? f_mtl.color_diffuse : rgb(1f0)
+        f_color = f_mtl.color_diffuse
         # For each tuple of indices
         for (l_idx, indices) in enumerate(face)
             # Note: OBJ uses 1-based indexing
@@ -226,7 +228,7 @@ function ObjectMesh(file_path::String)
         push!(textures, texture)
     end
 
-    ObjectMesh(min_coords, max_coords, vlists, clists, textures)
+    ObjectMesh(min_coords, max_coords, vlists, texclists, clists, textures)
 end
 
 function get(mesh_name::String)
@@ -248,13 +250,13 @@ end
 
 function _load_mtl(model_file::String)
     texture_diffuse = nothing
-
     model_dir, file_name = splitdir(model_file) .* ""
 
     # Determine the default texture path for the default material
     tex_name = split(file_name, '.')[1] * ""
     tex_path = get_file_path("src/textures", tex_name, "png")
-    if isdir(tex_path)
+
+    if ispath(tex_path)
         texture_diffuse = load_texture(tex_path)
     end
 
@@ -269,9 +271,9 @@ function _load_mtl(model_file::String)
               texture_specular = nothing)
         ])
 
-    mtl_path = split(model_file, '.')[1] * ".mtl"
+    mtl_path = model_file[1:end-4] * ".mtl"
 
-    if isdir(mtl_path)
+    if ispath(mtl_path)
         parse_mtllib!(mtl_path, materials, Float32)
     end
 

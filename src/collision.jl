@@ -33,7 +33,6 @@ function tensor_sat_test(norm::Vector{Matrix{T}}, corners::Vector{Matrix{T}}) wh
     dotval = norm .* corners
     mins = minimum.(dotval, dims=2)
     maxs = maximum.(dotval, dims=2)
-
     return mins, maxs
 end
 
@@ -71,7 +70,7 @@ function generate_corners(pos::Vector{Float32}, min_coords::Vector{Float32},
 end
 
 
-function tile_corners(pos::Vector{Float32}, width::Float32)
+function tile_corners(pos::Vector{Int}, width::Float32)
     ##
     #Generates the absolute corner coord for a tile, given grid pos and tile width
     ##
@@ -93,7 +92,9 @@ function generate_norm(corners::Array{Float32, 2})
     #for rectangle given vertices *in a particular order* (see generate_corners)
     ##
     ca = cov(corners, corrected=false)
-    vect = eigen(ca).vectors
+    # Multiply by -1 and swap colums to match with numpy results
+    vect = -eigen(ca).vectors
+    vect = hcat(vect[:, 2], vect[:, 1])
     return permutedims(vect)
 end
 
@@ -122,7 +123,8 @@ function find_candidate_tiles(obj_corners, tile_size)
     return possible_tiles
 end
 
-function intersects(duckie::Matrix{T}, objs_stacked, duckie_norm::Matrix{T}, norms_stacked) where T
+function intersects(duckie::Matrix{Float32}, objs_stacked::Vector{Matrix{Float32}},
+                    duckie_norm::Matrix{Float32}, norms_stacked::Vector{Matrix{Float32}})
     ##
     #Helper function for Tensor-based OBB intersection.
     #Variable naming: SAT requires checking of the projection of all normals
@@ -235,5 +237,5 @@ function heading_vec(θ)
 
     x = cos(θ)
     z = -sin(θ)
-    return [x, 0, z]
+    return [x, 0f0, z]
 end

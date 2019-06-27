@@ -1,32 +1,32 @@
 struct ObjectData
-    objects::Vector
-    object_corners
-    collidable_centers
-    collidable_corners
-    collidable_norms
-    collidable_safety_radii
+    objects::Vector{AbstractWorldObj}
+    collidable_centers::Vector{Array{Float32, 2}}
+    collidable_corners::Vector{Array{Float32, 2}}
+    collidable_norms::Vector{Array{Float32, 2}}
+    collidable_safety_radii::Vector{Float32}
 end
 
-function ObjectData(map_data::Dict, road_tile_size::Float32, domain_rand::Bool, grid)
+function ObjectData(map_data::Dict, road_tile_size::Float32, domain_rand::Bool, grid::Vector{Union{Missing, Dict{String,Any}}},
+                    grid_width::Int, grid_height::Int)
     # Create the objects array
-    objects = []
+    objects = Vector{AbstractWorldObj}()
 
     # The corners for every object, regardless if collidable or not
-    object_corners = []
+    #object_corners = []
 
     # Arrays for checking collisions with N static objects
     # (Dynamic objects done separately)
     # (N x 2): Object position used in calculating reward
-    collidable_centers = []
+    collidable_centers = Vector{Vector{Float32}}()
 
     # (N x 2 x 4): 4 corners - (x, z) - for object's boundbox
-    collidable_corners = []
+    collidable_corners = Vector{Matrix{Float32}}()
 
     # (N x 2 x 2): two 2D norms for each object (1 per axis of boundbox)
-    collidable_norms = []
+    collidable_norms = Vector{Matrix{Float32}}()
 
     # (N): Safety radius for object used in calculating reward
-    collidable_safety_radii = []
+    collidable_safety_radii = Vector{Float32}()
 
     # For each object
     for (obj_idx, desc) in enumerate(get(map_data, "objects", []))
@@ -66,6 +66,7 @@ function ObjectData(map_data::Dict, road_tile_size::Float32, domain_rand::Bool, 
         ])
 
         # obj = nothing
+        @show kind
         if static
             if kind == "trafficlight"
                 obj = TrafficLightObj(obj_desc, domain_rand, SAFETY_RAD_MULT)
@@ -84,7 +85,7 @@ function ObjectData(map_data::Dict, road_tile_size::Float32, domain_rand::Bool, 
             end
         end
 
-        push!(objects, obj)
+        objects = vcat(objects, [obj])
 
         # Compute collision detection information
 
@@ -94,19 +95,17 @@ function ObjectData(map_data::Dict, road_tile_size::Float32, domain_rand::Bool, 
         possible_tiles = find_candidate_tiles(_obj_corners(obj), road_tile_size)
 
         # If the object intersects with a drivable tile
+
         if static && kind != "trafficlight" && _collidable_object(
-                grid, obj.obj_corners, obj.obj_norm, possible_tiles, road_tile_size)
-            push!(collidable_centers, pos)
-            push!(collidable_corners, permutedims(obj.obj_corners))
-            push!(collidable_norms, obj.obj_norm)
-            push!(collidable_safety_radii, obj.safety_radius)
+                grid, grid_width, grid_height, obj.obj_corners, obj.obj_norm, possible_tiles, road_tile_size)
+            collidable_centers = vcat(collidable_centers, pos)
+            collidable_corners = cat(collidable_corners, obj.wobj.obj_corners, dims=3)
+            collidable_norms = cat(collidable_norms, obj.wobj.obj_norm, dims=3)
+            collidable_safety_radii = vcat(collidable_safety_radii, obj.wobj.safety_radius)
         end
     end
     # If there are collidable objects
-    if length(collidable_corners) > 0
-        collidable_corners = permutedims(hcat(collidable_corners...))
-        collidable_norms = permutedims(hcat(collidable_norms...))
-
+    if size(collidable_corners, 3) > 0
         # Stack doesn't do anything if there's only one object,
         # So we add an extra dimension to avoid shape errors later
         if ndims(collidable_corners) == 2
@@ -114,12 +113,14 @@ function ObjectData(map_data::Dict, road_tile_size::Float32, domain_rand::Bool, 
             collidable_norms = add_axis(collidable_norms)
         end
     end
-
-    ObjectData(objects, object_corners, collidable_centers, collidable_corners,
+    @show size.((collidable_centers, collidable_corners,
+               collidable_norms))
+    ObjectData(objects, collidable_centers, collidable_corners,
                collidable_norms, collidable_safety_radii)
 end
 
-function _get_curve(grid, i, j, width, height, road_tile_size)
+function _get_curve(grid::Vector{Union{Missing,Dict{String,Any}}}, i::Int, j::Int,
+                    width::Int, height::Int, road_tile_size::Float32)
     ##
     #    Get the Bezier curve control points for a given tile
     ##
@@ -261,7 +262,17 @@ function _get_curve(grid, i, j, width, height, road_tile_size)
 
     return cat(pts..., dims=3)
 end
-
+#=
+struct tile
+    coords::Vector{Float32}
+    texture
+    color
+    kind::String
+    angle::Float32
+    drivable::Bool
+    curves
+end
+=#
 struct Grid
     road_tile_size::Float32
     grid_width::Int
@@ -269,7 +280,7 @@ struct Grid
     _grid::Vector
     obj_data::ObjectData
     road_vlist::Matrix{Float32}
-    road_tlist
+    road_tlist::Matrix{Float32}
     ground_vlist::Matrix{Float32}
     drivable_tiles::Vector{Dict}
     mesh::ObjectMesh
@@ -277,7 +288,8 @@ struct Grid
 end
 
 
-function _set_tile!(grid, i, j, width, height, tile)
+function _set_tile!(grid::Vector{Union{Missing,Dict{String,Any}}}, i::Int, j::Int,
+                    width::Int, height::Int, tile::Dict{String,Any})
     @assert 1 ≤ i ≤ width
     @assert 1 ≤ j ≤ height
     grid[(j-1)*width + i] = tile
@@ -285,7 +297,7 @@ end
 
 _get_tile(grid::Grid, i, j) = _get_tile(grid._grid, i, j, grid.grid_width, grid.grid_height)
 
-function _get_tile(grid, i, j, width, height)
+function _get_tile(grid::Vector{Union{Missing,Dict{String,Any}}}, i::Int, j::Int, width::Int, height::Int)
     ##
     #Returns nothing if the duckiebot is not in a tile.
     ##
@@ -382,7 +394,7 @@ function Grid(map_data::Dict, domain_rand)
             end
 
             tile = Dict([
-                "coords"=> (i, j),
+                "coords"=> [i, j],
                 "kind"=> kind * "",
                 "angle"=> angle,
                 "drivable"=> drivable
@@ -399,7 +411,7 @@ function Grid(map_data::Dict, domain_rand)
     end
     #TODO
     mesh = ObjMesh.get("duckiebot")
-    obj_data = ObjectData(map_data, road_tile_size, domain_rand, _grid)
+    obj_data = ObjectData(map_data, road_tile_size, domain_rand, _grid, grid_width, grid_height)
 
     # Get the starting tile from the map, if specified
     start_tile = nothing

@@ -342,8 +342,8 @@ end
 
 function close(sim::Simulator) end
 
-function _collidable_object(grid, grid_width, grid_height, obj_corners, obj_norm,
-                            possible_tiles, road_tile_size)
+function _collidable_object(grid, grid_width, grid_height, obj_corners::Array{Float32,2}, obj_norm,
+                            possible_tiles, road_tile_size::Float32)
     ##
     #A function to check if an object intersects with any
     #drivable tiles, which would mean our agent could run into them.
@@ -351,11 +351,11 @@ function _collidable_object(grid, grid_width, grid_height, obj_corners, obj_norm
     ##
 
     size(possible_tiles) == (0,) && (return false)
-    drivable_tiles = []
+    drivable_tiles = Vector{NTuple{2,Int}}()
     for c in possible_tiles
         tile = _get_tile(grid, c..., grid_width, grid_height)
-        if !ismissing(tile) && tile["drivable"]
-            push!(drivable_tiles, (c...))
+        if !ismissing(tile) && !isnothing(tile) && tile["drivable"]
+            drivable_tiles = vcat(drivable_tiles, [Tuple(c)])
         end
     end
     isempty(drivable_tiles) && (return false)
@@ -364,12 +364,12 @@ function _collidable_object(grid, grid_width, grid_height, obj_corners, obj_norm
     tile_norms = repeat([1f0 0f0; 0f0 1f0],  length(drivable_tiles))
 
     # Find the corners for each candidate tile
-    drivable_tiles = [permutedims(
+    drivable_tiles = map(pt->permutedims(
         tile_corners(
                 _get_tile(grid, pt..., grid_width, grid_height)["coords"],
                 road_tile_size
-        )) for pt in drivable_tiles
-    ]
+        )), drivable_tiles)
+
 
     # Stack doesn't do anything if there's only one object,
     # So we add an extra dimension to avoid shape errors later
@@ -377,6 +377,7 @@ function _collidable_object(grid, grid_width, grid_height, obj_corners, obj_norm
         tile_norms = [tile_norms]
     end
     # Only add it if one of the vertices is on a drivable tile
+
     return intersects(obj_corners, drivable_tiles, obj_norm, tile_norms)
 end
 
@@ -696,7 +697,11 @@ function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
     # For each object
     objs = _objects(fp)
     if length(objs) > 0
-        scene = vcat(scene, map(obj->render(obj, fp.draw_bbox), _objects(fp))...)
+        # Contains Vector{Vector{Δ}}
+        obj_Δs=filter(o->!isnothing(o), map(obj->render(obj, fp.draw_bbox), objs))
+        for oΔ in obj_Δs
+            scene = vcat(scene, oΔ)
+        end
     end
 
     # Draw the agent's own bounding box
@@ -754,11 +759,8 @@ function render_obs(sim::Simulator)
             sim.fixedparams,
             sim.cur_pos,
             sim.cur_angle,
-            #sim.multi_fbo,
-            #sim.final_fbo,
             false
     )
-
     # Take only the viewable triangles for rendering
     observation = vcat(observation, viewable_scene(sim.scene, sim.cur_pos, sim.cur_angle))
     # self.undistort - for UndistortWrapper
@@ -768,15 +770,29 @@ function render_obs(sim::Simulator)
     #end
 
     # Setup some basic lighting with a far away sun
-    #TODO: See this later, use raytracer's light example
     if sim.fixedparams.domain_rand
-        light_pos = Vec3(sim.fixedparams.randomization_settings["light_pos"]...)
+        light_pos = sim.fixedparams.randomization_settings["light_pos"]
+        light_pos = Float32.(light_pos)
+        light_pos = Vec3(light_pos...)
     else
         light_pos = Vec3([-40f0], [200f0], [100f0])
     end
 
-    light = DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))
+    ambient = _perturb(sim.fixedparams, Vec3([0.5f0]), 0.3f0)
+    # XXX: diffuse is not used?
+    diffuse = _perturb(sim.fixedparams, Vec3([0.7f0]), 0.3f0)
+    #=
+    from pyglet import gl
+    gl.glLightfv(gl.GL_LIGHT0, gl.GL_POSITION, (gl.GLfloat * 4)(*light_pos))
+    gl.glLightfv(gl.GL_LIGHT0, gl.GL_AMBIENT, (gl.GLfloat * 4)(*ambient))
+    gl.glLightfv(gl.GL_LIGHT0, gl.GL_DIFFUSE, (gl.GLfloat * 4)(0.5, 0.5, 0.5, 1.0))
+    gl.glEnable(gl.GL_LIGHT0)
+    gl.glEnable(gl.GL_LIGHTING)
+    gl.glEnable(gl.GL_COLOR_MATERIAL)
+    =#
 
+    #light = DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))
+    light = PointLight(Vec3([1f0]), 50000000f0, light_pos)#Vec3([0f0], [1f0], [0f0]))
     origin, direction = get_primary_rays(cam)
 
     im = raytrace(origin, direction, observation, light, origin, 2)
