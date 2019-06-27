@@ -76,8 +76,11 @@ function FixedSimParams(map_name::String=DEFAULT_MAP_NAME,
 
     _map = Map(map_name, domain_rand)
 
-    randomizer = domain_rand ? Randomizer() : nothing
-    randomization_settings = nothing
+    randomizer, randomization_settings = nothing, nothing
+    if domain_rand
+        randomizer = Randomizer()
+        randomization_settings = randomize(randomizer)
+    end
 
     delta_time = 1f0 / frame_rate
 
@@ -173,26 +176,6 @@ function reset!(fsp::FixedSimParams)
         end
     end
 
-    # Setup some basic lighting with a far away sun
-    if fsp.domain_rand
-        light_pos = fsp.randomization_settings["light_pos"]
-    else
-        light_pos = [-40f0, 200f0, 100f0]
-    end
-
-    ambient = _perturb(fsp, ones(Float32, 3)*0.5f0, 0.3f0)
-    # XXX: diffuse is not used?
-    diffuse = _perturb(fsp, ones(Float32, 3)*0.7f0, 0.3f0)
-    #=
-    from pyglet import gl
-    gl.glLightfv(gl.GL_LIGHT0, gl.GL_POSITION, (gl.GLfloat * 4)(*light_pos))
-    gl.glLightfv(gl.GL_LIGHT0, gl.GL_AMBIENT, (gl.GLfloat * 4)(*ambient))
-    gl.glLightfv(gl.GL_LIGHT0, gl.GL_DIFFUSE, (gl.GLfloat * 4)(0.5, 0.5, 0.5, 1.0))
-    gl.glEnable(gl.GL_LIGHT0)
-    gl.glEnable(gl.GL_LIGHTING)
-    gl.glEnable(gl.GL_COLOR_MATERIAL)
-    =#
-
     # Ground color
     fsp.ground_color = _perturb(fsp, GROUND_COLOR, 0.3f0)
 
@@ -245,13 +228,13 @@ function reset!(fsp::FixedSimParams)
     # Randomize object parameters
     for obj in _objects(fsp)
         # Randomize the object color
-        _set_color!(obj, _perturb(fsp, ones(Float32, 3), 0.3f0))
+        _set_color!(obj, _perturb(fsp, Vec3([1f0]), 0.3f0))
 
         # Randomize whether the object is visible or not
         if _optional(obj) && fsp.domain_rand
-            _set_visible!(fsp, rand(fsp.rng, 0:1) == 0)
+            _set_visible!(obj, rand(fsp.rng, 0:1) == 0)
         else
-            _set_visible!(fsp, true)
+            _set_visible!(obj, true)
         end
     end
 
