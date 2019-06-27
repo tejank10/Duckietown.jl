@@ -64,6 +64,44 @@ function process_obj_dict(obj, safety_radius_mult)
             min_coords, max_coords, y_rot)
 end
 
+_obj_corners(wobj::WorldObj) = wobj.obj_corners
+_obj_corners(obj::AbstractWorldObj) = _obj_corners(obj.wobj)
+
+function _set_color!(wobj::WorldObj, color::Vec3)
+    wobj.color = color
+end
+
+_set_color!(obj::AbstractWorldObj, color::Vec3) = _set_color!(obj.wobj, color)
+
+function _set_visible!(wobj::WorldObj, val::Bool)
+    wobj.visible = val
+end
+
+_set_visible!(obj::AbstractWorldObj, val::Bool) = _set_visible!(obj.wobj, val)
+_visible(wobj::WorldObj) = wobj.visible
+_visible(obj::AbstractWorldObj) = _visible(obj.wobj)
+
+_optional(wobj::WorldObj) = wobj.optional
+_optional(obj::AbstractWorldObj) = _optional(obj.wobj)
+
+_pos(wobj::WorldObj) = wobj.pos
+_pos(obj::AbstractWorldObj) = _pos(obj.wobj)
+
+_max_coords(wobj::WorldObj) = wobj.max_coords
+_max_coords(obj::AbstractWorldObj) = _max_coords(obj.wobj)
+
+_scale(wobj::WorldObj) = wobj.scale
+_scale(obj::AbstractWorldObj) = _scale(obj.wobj)
+
+_y_rot(wobj::WorldObj) = wobj.y_rot
+_y_rot(obj::AbstractWorldObj) = _y_rot(obj.wobj)
+
+_mesh(wobj::WorldObj) = wobj.mesh
+_mesh(obj::AbstractWorldObj) = _mesh(obj.wobj)
+
+_color(wobj::WorldObj) = wobj.color
+_color(obj::AbstractWorldObj) = _color(obj.wobj)
+
 function render(obj::AbstractWorldObj, draw_bbox::Bool)
     ##
     #Renders the object to screen
@@ -86,14 +124,12 @@ function render(obj::AbstractWorldObj, draw_bbox::Bool)
     #gl.glRotatef(self.y_rot, 0, 1, 0)
     #gl.glColor3f(*self.color)
 
-    transformation_mat = get_transformation_mat(_pos(obj), _scale(obj), _yrot(obj), (0,1,0))
-
-    tranformed_vlists = transform_mesh(obj.mesh, transformation_mat)
-    #let mesh store a matrix. make vec3 out of it colorcoloronly when you render
-    # Skipped texture for now
-    Δed_faces = triangulate_faces.(tranformed_vlists, obj_mesh.texclist, obj_mesh.clists, obj_mesh.textures)
+    transformation_mat = get_transformation_mat(_pos(obj), _scale(obj), _y_rot(obj), (0,1,0))
+    obj_mesh = _mesh(obj)
+    transformed_vlists = transform_mesh(obj_mesh, transformation_mat)
+    #let mesh store a matrix. make vec3 out of it only when you render
+    Δed_faces = triangulate_faces.(transformed_vlists, obj_mesh.texclists, obj_mesh.clists, obj_mesh.textures)
     Δed_faces = vcat(Δed_faces...)
-    #return TriangleMesh(Δ_ed_faces)
 end
 
 function make_Δ(v1::Vec3, vert2::Vector{Float32}, vert3::Vector{Float32}, mat::Material)
@@ -132,12 +168,7 @@ function triangulate_faces(list_verts::Matrix{Float32}, texc::Matrix{Float32},
     num_verts = size(list_verts, 1)
 
     texture_ = (color_diffuse = color,
-                color_ambient = texture.color_ambient,
-                color_specular = texture.color_specular,
-                specular_exponent = texture.specular_exponent,
-                texture_ambient = texture.texture_ambient,
-                texture_diffuse = texture.texture_diffuse,
-                texture_specular = texture.texture_specular)
+                texture_diffuse = texture.texture_diffuse)
 
     Δs = map(i->make_Δ(v1, list_verts[i, :], list_verts[i+1, :], texc[1, :],
                        texc[i, :], texc[i+1, :], texture_), 2:num_verts-1)
@@ -172,21 +203,15 @@ function triangulate_faces(list_verts::Matrix{Float32}, texc::Nothing,
     num_verts = size(list_verts, 1)
 
     texture_ = (color_diffuse = color,
-                color_ambient = texture.color_ambient,
-                color_specular = texture.color_specular,
-                specular_exponent = texture.specular_exponent,
-                texture_ambient = texture.texture_ambient,
-                texture_diffuse = texture.texture_diffuse,
-                texture_specular = texture.texture_specular)
-
+                texture_diffuse = texture.texture_diffuse)
     mat = Material(;texture_...)
 
     Δs = map(i->make_Δ(v1, list_verts[i, :], list_verts[i+1, :], mat), 2:num_verts-1)
     return Δs
 end
 
-function triangulate_faces(list_verts::AbstractArray{T, 3}, list_texc::AbstractArray{T, 3},
-                           list_colors::Vector{Vec3}, list_texs::Vector{Union{NamedTuple,Nothing}}=nothing) where T
+function triangulate_faces(list_verts::Array{Float32, 3}, list_texc::Array{Float32, 3},
+                           list_colors::Vector{Vec3}, texture::Union{NamedTuple,Nothing})
     # list_verts: 3D array representing list of faces along 3rd dim.
     # Every face has 3 vertices. Vertices are along 1st dim.
     # X, Y and Z component of vertices, along 2nd dim.
@@ -199,10 +224,16 @@ function triangulate_faces(list_verts::AbstractArray{T, 3}, list_texc::AbstractA
     vt = Vector{Triangle}()
     for i in 1:num_faces
         Δ = triangulate_faces(list_verts[:, :, i], list_texc[:, :, i],
-                              list_colors[i], list_texs[i])
+                              list_colors[i], texture)
         vt = vcat(vt, Δ)
     end
     return vt
+end
+
+function triangulate_faces(list_verts::Array{Float32,3}, list_texc::Array{Float32,3},
+                           list_colors::Vector{Vec3}, texture::Vec3)
+   texture_ = (texture_diffuse = texture,)
+   triangulate_faces(list_verts, list_texc, list_colors, texture_)
 end
 
 get_transformation_mat(pos::Vector, scale, θ, rot_axis) =
@@ -273,15 +304,14 @@ function transform_mat(mat::Matrix{T}, transformation_mat::Matrix{T}) where T
     return (mat_ * transformation_mat)[:, 1:dim]
 end
 
-function tranform_mesh(vlist::AbstractArray{T, 3}, transformation_mat::Matrix{T}) where T
+function transform_mesh(vlist::Array{Float32,3}, transformation_mat::Array{Float32,2})
     num_faces = size(vlist, 3)
     trans_vlist = map(i -> transform_mat(vlist[:, :, i], transformation_mat), 1:num_faces)
-    cat(trans_vlist..., dims=3)
-    return trans_vlist
+    return cat(trans_vlist..., dims=3)
 end
 
-transform_mesh(obj_mesh::ObjectMesh, transformation_mat::Matrix) =
-[vlist->transform_mesh(vlist, transformation_mat) for vlist in vlists]
+transform_mesh(obj_mesh::ObjectMesh, transformation_mat::Array{Float32,2}) =
+map(vlist->transform_mesh(vlist, transformation_mat), obj_mesh.vlists)
 
 # Below are the functions that need to
 # be reimplemented for any dynamic object
@@ -296,7 +326,7 @@ function check_collision(wobj::WorldObj, agent_corners, agent_norm)
     return false
 end
 
-function proximity(wobj::WorldObj, agent_pos, agent_safety_rad)
+function proximity(wobj::WorldObj, agent_pos::Vector{Float32}, agent_safety_rad::Float32)
     ##
     #See if the agent is too close to this object
     #For static, return 0
@@ -306,32 +336,38 @@ function proximity(wobj::WorldObj, agent_pos, agent_safety_rad)
     return 0f0
 end
 
-function step!(wobj::WorldObj, delta_time)
+
+proximity(abs_wobj::AbstractWorldObj, agent_pos::Vector{Float32},
+          agent_safety_rad::Float32) = proximity(abs_wobj.wobj, agent_pos, agent_safety_rad)
+
+function step!(wobj::WorldObj, delta_time::Float32)
     ##
     #Use a motion model to move the object in the world
     ##
     !wobj.static && throw(NotImplementedError)
 end
 
+step!(abs_wobj::AbstractWorldObj, delta_time::Float32) = step!(abs_wobj.wobj, delta_time)
 
 mutable struct DuckiebotObj <: AbstractWorldObj
     wobj::WorldObj
-    follow_dist
-    velocity
-    max_iterations
-    gain
-    trim
-    radius
-    k
-    limit
-    wheel_dist
-    robot_width
-    robot_length
+    follow_dist::Float32
+    velocity::Float32
+    max_iterations::Int
+    gain::Float32
+    trim::Float32
+    radius::Float32
+    k::Float32
+    limit::Float32
+    wheel_dist::Float32
+    robot_width::Float32
+    robot_length::Float32
 end
 
-function DuckiebotObj(obj, domain_rand, safety_radius_mult, wheel_dist,
-                      robot_width, robot_length, gain=2f0, trim=0f0,
-                      radius=0.0318f0, k=27f0, limit=1f0)
+function DuckiebotObj(obj, domain_rand::Bool, safety_radius_mult::Float32,
+                      wheel_dist::Float32, robot_width::Float32, robot_length::Float32,
+                      gain::Float32=2f0, trim::Float32=0f0, radius::Float32=0.0318f0,
+                      k::Float32=27f0, limit::Float32=1f0)
     wobj = WorldObj(obj, domain_rand, safety_radius_mult)
     follow_dist, velocity = nothing, nothing
     if domain_rand
@@ -372,19 +408,7 @@ function check_collision(db_obj::DuckiebotObj, agent_corners, agent_norm)
     )
 end
 
-function proximity(db_obj::DuckiebotObj, agent_pos, agent_safety_rad)
-    ##
-    #See if the agent is too close to this object
-    #based on a heuristic for the "overlap" between
-    #their safety circles
-    ##
-    d = norm(agent_pos .- pos)
-    score = d - agent_safety_rad - self.safety_radius
-
-    return min(0f0, score)
-end
-
-function _update_pos(db_obj::DuckiebotObj, action, deltaTime)
+function _update_pos(db_obj::DuckiebotObj, action::Vector{Float32}, deltaTime::Float32)
     vel, angle = action
 
     # assuming same motor constants k for both motors
@@ -447,16 +471,16 @@ end
 
 mutable struct DuckieObj <: AbstractWorldObj
     wobj::WorldObj
-    pedestrian_wait_time
-    vel
-    heading
-    start
-    center
-    pedestrian_active
-    wiggle
+    pedestrian_wait_time::Int
+    vel::Float32
+    heading::Vector{Float32}
+    start::Vector{Float32}
+    center::Vector{Float32}
+    pedestrian_active::Bool
+    wiggle::Int
 end
 
-function DuckieObj(obj, domain_rand::Bool, safety_radius_mult, walk_distance)
+function DuckieObj(obj, domain_rand::Bool, safety_radius_mult::Float32, walk_distance::Float32)
     wobj = WorldObj(obj, domain_rand, safety_radius_mult)
 
     walk_distance = walk_distance + 0.25f0
@@ -500,19 +524,19 @@ function check_collision(dobj::DuckieObj, agent_corners, agent_norm)
     )
 end
 
-function proximity(dobj::DuckieObj, agent_pos, agent_safety_rad)
+function proximity(db_obj::Obj, agent_pos::Vector{Float32}, agent_safety_rad::Float32) where Obj <: Union{DuckieObj, DuckiebotObj}
     ##
     #See if the agent is too close to this object
     #based on a heuristic for the "overlap" between
     #their safety circles
     ##
-    d = norm(agent_pos .- dobj.center)
-    score = d .- agent_safety_rad .- dobj.wobj.safety_radius
+    d = norm(agent_pos .- pos)
+    score = d - agent_safety_rad - self.safety_radius
 
-    return min(0, score)
+    return min(0f0, score)
 end
 
-function step!(dobj::DuckieObj, delta_time)
+function step!(dobj::DuckieObj, delta_time::Float32)
     ##
     #Use a motion model to move the object in the world
     ##
@@ -549,27 +573,27 @@ function finish_walk(dobj::DuckieObj)
     #(vel, rot, wait time until next walk)
     ##
     dobj.start = copy(dobj.center)
-    dobj.angle += π
+    dobj.angle += Float32(π)
     dobj.pedestrian_active = false
 
     if dobj.wobj.domain_rand
         # Assign a random velocity (in opp. direction) and a wait time
         # TODO: Fix this: This will go to 0 over time
-        dobj.vel = -sign(dobj.vel) * abs(rand(Normal(0.02f0, 0.005f0)))
+        dobj.vel = -sign(dobj.vel) * abs(Float32(rand(Normal(0.02f0, 0.005f0))))
         dobj.pedestrian_wait_time = rand(3:19)
     else
         # Just give it the negative of its current velocity
-        dobj.vel *= -1
+        dobj.vel *= -1f0
         dobj.pedestrian_wait_time = 8
     end
 end
 
 mutable struct TrafficLightObj <: AbstractWorldObj
     wobj::WorldObj
-    texs
-    time
-    freq
-    pattern
+    texs::Vector{Vec3}
+    time::Float32
+    freq::Float32
+    pattern::Int
 end
 
 function TrafficLightObj(obj, domain_rand, safety_radius_mult)
@@ -579,15 +603,15 @@ function TrafficLightObj(obj, domain_rand, safety_radius_mult)
         load_texture(get_file_path("src/textures", "trafficlight_card0", "jpg")),
         load_texture(get_file_path("src/textures", "trafficlight_card1", "jpg"))
     ]
-    time = 0
+    time = 0f0
 
     # Frequency and current pattern of the lights
     if wobj.domain_rand
-        freq = rand(Normal(4, 7))
-        pattern = rand(0:1)
+        freq = Float32(rand(Normal(4, 7)))
+        pattern = rand(1:2)
     else
-        freq = 5
-        pattern = 0
+        freq = 5f0
+        pattern = 1
     end
 
     # Use the selected pattern
@@ -596,14 +620,14 @@ function TrafficLightObj(obj, domain_rand, safety_radius_mult)
     TrafficLightObj(wobj, texs, time, freq, pattern)
 end
 
-function step!(tl_obj::TrafficLightObj, delta_time)
+function step!(tl_obj::TrafficLightObj, delta_time::Float32)
     ##
     #Changes the light color periodically
     ##
 
     tl_obj.time += delta_time
     if round(tl_obj.time, 3) % tl_obj.freq == 0  # Swap patterns
-        seltl_objf.pattern ^= 1
+        tl_obj.pattern ⊻= 3
         tl_obj.wobj.mesh.textures[1] = tl_obj.texs[tl_obj.pattern]
     end
 end
@@ -611,48 +635,16 @@ end
 function is_green(tl_obj::TrafficLightObj, direction='N')
     if direction == 'N' || direction == 'S'
         if tl_obj.wobj.y_rot == 45 || tl_obj.wobj.y_rot == 135
-            return tl_obj.pattern == 0
-        elseif tl_obj.wobj.y_rot == 225 || tl_obj.wobj.y_rot == 315
             return tl_obj.pattern == 1
+        elseif tl_obj.wobj.y_rot == 225 || tl_obj.wobj.y_rot == 315
+            return tl_obj.pattern == 2
         end
     elseif direction == 'E' || direction == 'W'
         if tl_obj.wobj.y_rot == 45 || tl_obj.wobj.y_rot == 135
-            return self.pattern == 1
+            return tl_obj.pattern == 2
         elseif tl_obj.wobj.y_rot == 225 || tl_obj.wobj.y_rot == 315
-            return self.pattern == 0
+            return tl_obj.pattern == 1
         end
     end
     return false
 end
-
-_obj_corners(wobj::WorldObj) = wobj.obj_corners
-_obj_corners(obj::AbstractWorldObj) = _obj_corners(obj.wobj)
-
-function _set_color!(wobj::WorldObj, color::Vec3)
-    wobj.color = color
-end
-
-_set_color!(obj::AbstractWorldObj, color::Vec3) = _set_color!(obj.wobj, color)
-
-function _set_visible!(wobj::WorldObj, val::Bool)
-    wobj.visible = val
-end
-
-_set_visible!(obj::AbstractWorldObj, val::Bool) = _set_color!(obj.wobj, val)
-_visible(wobj::WorldObj) = wobj.visible
-_visible(obj::AbstractWorldObj) = _visible(obj.wobj)
-
-_optional(wobj::WorldObj) = wobj.optional
-_optional(obj::AbstractWorldObj) = _optional(obj.wobj)
-
-_pos(wobj::WorldObj) = wobj.pos
-_pos(obj::AbstractWorldObj) = _pos(obj.wobj)
-
-_max_coords(wobj::WorldObj) = wobj.max_coords
-_max_coords(obj::AbstractWorldObj) = _max_coords(obj.wobj)
-
-_scale(wobj::WorldObj) = wobj.scale
-_scale(obj::AbstractWorldObj) = _scale(obj.wobj)
-
-_y_rot(wobj::WorldObj) = wobj.y_rot
-_y_rot(obj::AbstractWorldObj) = _y_rot(obj.wobj)

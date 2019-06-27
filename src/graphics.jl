@@ -268,6 +268,6 @@ function bezier_draw(cps, n=20, red::Bool=false)
 end
 
 
-export Texture, gen_rot_matrix, rotate_point,
+export gen_rot_matrix, rotate_point, load_texture,
        bezier_closest, bezier_point, bezier_tangent
 end #module
