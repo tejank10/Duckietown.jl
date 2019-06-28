@@ -262,7 +262,7 @@ function _load_mtl(model_file::String)
 
     materials = Dict{String, Union{NamedTuple,Nothing}}([
         # This is default material
-        ""=> (color_diffuse = Vec3([0f0], [0f0], [1f0]),
+        ""=> (color_diffuse = Vec3(1.0f0),
               color_ambient = Vec3(1.0f0),
               color_specular = Vec3(1.0f0),
               specular_exponent = 50.0f0,
