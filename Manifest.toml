@@ -228,7 +228,7 @@ version = "0.4.0"
 
 [[GymSpaces]]
 deps = ["DataStructures"]
-git-tree-sha1 = "4239d2300038a19b53c53346ba674a3720f23b0a"
+git-tree-sha1 = "775a2ee4313910bb2460dc86b6dda7aeaeb8951e"
 repo-rev = "master"
 repo-url = "https://github.com/kraftpunk97/GymSpaces.jl"
 uuid = "4896a6fa-884d-11e9-35a0-9763e69c01ff"
