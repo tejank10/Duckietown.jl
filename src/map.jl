@@ -66,7 +66,7 @@ function ObjectData(map_data::Dict, road_tile_size::Float32, domain_rand::Bool, 
         ])
 
         # obj = nothing
-        @show kind
+
         if static
             if kind == "trafficlight"
                 obj = TrafficLightObj(obj_desc, domain_rand, SAFETY_RAD_MULT)
@@ -113,8 +113,7 @@ function ObjectData(map_data::Dict, road_tile_size::Float32, domain_rand::Bool, 
             collidable_norms = add_axis(collidable_norms)
         end
     end
-    @show size.((collidable_centers, collidable_corners,
-               collidable_norms))
+
     ObjectData(objects, collidable_centers, collidable_corners,
                collidable_norms, collidable_safety_radii)
 end

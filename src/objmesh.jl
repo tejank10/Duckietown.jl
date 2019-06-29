@@ -240,7 +240,7 @@ function get(mesh_name::String)
     file_path = get_file_path("src/meshes", mesh_name, "obj")
 
     file_path ∈ keys(cache) && (return cache[file_path])
-
+    
     mesh = ObjectMesh(file_path)
     cache[file_path] = mesh
 
