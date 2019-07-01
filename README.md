@@ -9,6 +9,9 @@ julia> ]add https://github.com/avik-pal/RayTracer.jl
 julia> ]add https://github.com/tejank10/Duckietown.jl
 ```
 
-## Current State
-Currently it supports the maps sans objects and textures.
+## To Do
+* [x] Textures
+* [ ] Test out all the maps
+* [ ] MultiMap mode
+* [ ] Recording episode/animation
 
