@@ -17,15 +17,15 @@ function agent_boundbox(true_pos, width, length, f_vec, r_vec)
     hlength = length / 2
 
     # Indexing to make sure we only get the x/z dims
-    corners = hcat(
+    corners = permutedims(hcat(
         true_pos .- hwidth .* r_vec .- hlength .* f_vec,
         true_pos .+ hwidth .* r_vec .- hlength .* f_vec,
         true_pos .+ hwidth .* r_vec .+ hlength .* f_vec,
         true_pos .- hwidth .* r_vec .+ hlength .* f_vec
-    )[[1, 3], :]
+    )[[1, 3], :])
 end
 
-function tensor_sat_test(norm::Vector{Matrix{T}}, corners::Vector{Matrix{T}}) where T
+function tensor_sat_test(norm::Vector{Matrix{Float32}}, corners::Vector{Matrix{Float32}})
     ##
     #Separating Axis Theorem (SAT) extended to >2D.
     #(each input ~ "a list of 2D matrices")
@@ -36,9 +36,20 @@ function tensor_sat_test(norm::Vector{Matrix{T}}, corners::Vector{Matrix{T}}) wh
     return mins, maxs
 end
 
-tensor_sat_test(norm::Matrix{T}, corners::Matrix{T}) where T = tensor_sat_test([norm], [corners])
-tensor_sat_test(norm::Matrix{T}, corners::Vector{Matrix{T}}) where T = tensor_sat_test([norm], corners)
-tensor_sat_test(norm::Vector{Matrix{T}}, corners::Matrix{T}) where T = tensor_sat_test(norm, [corners])
+function tensor_sat_test(norm::Matrix{Float32}, corners::Matrix{Float32})
+    mins, maxs = tensor_sat_test([norm], [corners])
+    return mins[1][:, 1], maxs[1][:, 1]
+end
+
+function tensor_sat_test(norm::Matrix{Float32}, corners::Vector{Matrix{Float32}})
+    mins, maxs = tensor_sat_test([norm], corners)
+    map(x->map(i->i[:, 1], x), (mins, maxs))
+end
+
+function tensor_sat_test(norm::Vector{Matrix{Float32}}, corners::Matrix{Float32})
+    mins, maxs = tensor_sat_test(norm, [corners])
+    map(x->map(i->i[:, 1], x), (mins, maxs))
+end
 
 function overlaps(min1, max1, min2, max2)
     ##
@@ -74,15 +85,15 @@ function tile_corners(pos::Vector{Int}, width::Float32)
     ##
     #Generates the absolute corner coord for a tile, given grid pos and tile width
     ##
-    px = pos[1]
-    pz = pos[end]
+    px = pos[1] - 1f0
+    pz = pos[end] - 1f0
 
     return [
-        px * width - width pz * width - width;
-        px * width + width pz * width - width;
-        px * width + width pz * width + width;
-        px * width - width pz * width + width
-    ]
+        px - 1f0 pz - 1f0;
+        px + 1f0 pz - 1f0;
+        px + 1f0 pz + 1f0;
+        px - 1f0 pz + 1f0;
+    ] * width
 end
 
 
@@ -93,8 +104,9 @@ function generate_norm(corners::Array{Float32, 2})
     ##
     ca = cov(corners, corrected=false)
     # Multiply by -1 and swap colums to match with numpy results
-    vect = -eigen(ca).vectors
-    vect = hcat(vect[:, 2], vect[:, 1])
+    #vect = -eigen(ca).vectors
+    #vect = hcat(vect[:, 2], vect[:, 1])
+    vect = eigen(ca).vectors
     return permutedims(vect)
 end
 
@@ -136,7 +148,7 @@ function intersects(duckie::Matrix{Float32}, objs_stacked::Vector{Matrix{Float32
     objduck_min, objduck_max = tensor_sat_test(duckie_norm, objs_stacked)
     duckobj_min, duckobj_max = tensor_sat_test(norms_stacked, permutedims(duckie))
     objobj_min, objobj_max = tensor_sat_test(norms_stacked, objs_stacked)
-
+    
     # Iterate through each object we are checking against
     for idx in 1:length(objduck_min)
         # If any interval doesn't overlap, immediately know objects don't intersect
@@ -198,14 +210,14 @@ function intersects_single_obj(duckie, obj, duckie_norm, norm)
 end
 
 
-function safety_circle_intersection(d, r1, r2)
+function safety_circle_intersection(d::Vector{Float32}, r1::Float32, r2::Vector{Float32})
     #=
     Checks if  two circles with centers separated by d and centered
     at r1 and r2 either intesect or are enveloped (one inside of other)
     =#
-    intersect = ((r1 .- r2) .^ 2 .≤ d ^ 2) .& (d ^ 2 .≤ (r1 + r2) .^ 2)
+    intersect = ((r1 .- r2) .^ 2 .≤ d .^ 2) .& (d .^ 2 .≤ (r1 .+ r2) .^ 2)
 
-    enveloped = d .< abs(r1 .- r2)
+    enveloped = d .< abs.(r1 .- r2)
 
     return any(intersect) || any(enveloped)
 end

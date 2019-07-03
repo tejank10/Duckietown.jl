@@ -210,12 +210,14 @@ _collidable_norms(map::Map) = _collidable_norms(map._grid)
 _collidable_norms(fp::FixedSimParams) = _collidable_norms(fp._map)
 _collidable_norms(sim::Simulator) = _collidable_norms(sim.fixedparams)
 
-_collidable_centers(grid::Grid) = grid.obj_data.collidable_corners
+_collidable_centers(grid::Grid) = grid.obj_data.collidable_centers
 _collidable_centers(map::Map) = _collidable_centers(map._grid)
 _collidable_centers(fp::FixedSimParams) = _collidable_centers(fp._map)
 _collidable_centers(sim::Simulator) = _collidable_centers(sim.fixedparams)
 
-_collidable_safety_radii(fp::FixedSimParams) = fp.collidable_safety_radii
+_collidable_safety_radii(grid::Grid) = grid.obj_data.collidable_safety_radii
+_collidable_safety_radii(map::Map) = _collidable_safety_radii(map._grid)
+_collidable_safety_radii(fp::FixedSimParams) = _collidable_safety_radii(fp._map)
 _collidable_safety_radii(sim::Simulator) = _collidable_safety_radii(sim.fixedparams)
 
 _delta_time(fp::FixedSimParams) = fp.delta_time
@@ -370,7 +372,6 @@ function _collidable_object(grid, grid_width, grid_height, obj_corners::Array{Fl
                 road_tile_size
         )), drivable_tiles)
 
-
     # Stack doesn't do anything if there's only one object,
     # So we add an extra dimension to avoid shape errors later
     if ndims(tile_norms) == 2
@@ -439,8 +440,8 @@ function _proximity_penalty2(sim::Simulator, pos, angle)
     if length(_collidable_centers(sim)) == 0
         static_dist = 0
     # Find safety penalty w.r.t static obstacles
-    else
-        d = norm(_collidable_centers(sim) .- pos, dims=2)
+    else 
+        d = norm.(_collidable_vcenters(sim) .- [pos])
 
         if !safety_circle_intersection(d, AGENT_SAFETY_RAD, _collidable_safety_radii(sim))
             static_dist = 0
@@ -482,9 +483,9 @@ function update_physics(sim::Simulator, action, delta_time)
     # Update world objects
     objs = _objects(sim)
     for obj in objs
-        if !obj.static && obj.kind == "duckiebot"
-            obj_i, obj_j = get_grid_coords(_road_tile_size(sim), obj.pos)
-            cond(o) = get_grid_coords(_road_tile_size(sim), o.pos) == (obj_i, obj_j) && o != obj
+        if !_static(obj) && obj.kind == "duckiebot"
+            obj_i, obj_j = get_grid_coords(_road_tile_size(sim), _pos(obj))
+            cond(o) = get_grid_coords(_road_tile_size(sim), _pos(obj)) == (obj_i, obj_j) && o != obj
             same_tile_obj = filter(cond, objs)
             step!(obj, delta_time, sim.fixedparams, closest_curve_point, same_tile_obj)
         else

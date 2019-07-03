@@ -1,6 +1,6 @@
 struct ObjectData
     objects::Vector{AbstractWorldObj}
-    collidable_centers::Vector{Array{Float32, 2}}
+    collidable_centers::Vector{Vector{Float32}}
     collidable_corners::Vector{Array{Float32, 2}}
     collidable_norms::Vector{Array{Float32, 2}}
     collidable_safety_radii::Vector{Float32}
@@ -90,30 +90,20 @@ function ObjectData(map_data::Dict, road_tile_size::Float32, domain_rand::Bool, 
         # Compute collision detection information
 
         # angle = rotate * (math.pi / 180)
-
-        # Find drivable tiles object could intersect with
+        
+	# Find drivable tiles object could intersect with
         possible_tiles = find_candidate_tiles(_obj_corners(obj), road_tile_size)
 
         # If the object intersects with a drivable tile
-
         if static && kind != "trafficlight" && _collidable_object(
-                grid, grid_width, grid_height, obj.obj_corners, obj.obj_norm, possible_tiles, road_tile_size)
-            collidable_centers = vcat(collidable_centers, pos)
-            collidable_corners = cat(collidable_corners, obj.wobj.obj_corners, dims=3)
-            collidable_norms = cat(collidable_norms, obj.wobj.obj_norm, dims=3)
-            collidable_safety_radii = vcat(collidable_safety_radii, obj.wobj.safety_radius)
+                grid, grid_width, grid_height, _obj_corners(obj), _obj_norm(obj), possible_tiles, road_tile_size)
+            collidable_centers = vcat(collidable_centers, [pos])
+            collidable_corners = vcat(collidable_corners, [permutedims(_obj_corners(obj))])
+            collidable_norms = vcat(collidable_norms, [_obj_norm(obj)])
+            collidable_safety_radii = vcat(collidable_safety_radii, [_safety_radius(obj)])
         end
     end
-    # If there are collidable objects
-    if size(collidable_corners, 3) > 0
-        # Stack doesn't do anything if there's only one object,
-        # So we add an extra dimension to avoid shape errors later
-        if ndims(collidable_corners) == 2
-            collidable_corners = add_axis(collidable_corners)
-            collidable_norms = add_axis(collidable_norms)
-        end
-    end
-
+   
     ObjectData(objects, collidable_centers, collidable_corners,
                collidable_norms, collidable_safety_radii)
 end

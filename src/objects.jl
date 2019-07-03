@@ -67,6 +67,9 @@ end
 _obj_corners(wobj::WorldObj) = wobj.obj_corners
 _obj_corners(obj::AbstractWorldObj) = _obj_corners(obj.wobj)
 
+_obj_norm(wobj::WorldObj) = wobj.obj_norm
+_obj_norm(obj::AbstractWorldObj) = _obj_norm(obj.wobj)
+
 function _set_color!(wobj::WorldObj, color::Vec3)
     wobj.color = color
 end
@@ -101,6 +104,12 @@ _mesh(obj::AbstractWorldObj) = _mesh(obj.wobj)
 
 _color(wobj::WorldObj) = wobj.color
 _color(obj::AbstractWorldObj) = _color(obj.wobj)
+
+_safety_radius(wobj::WorldObj) = wobj.safety_radius
+_safety_radius(obj::AbstractWorldObj) = _safety_radius(obj.wobj)
+
+_static(wobj::WorldObj) = wobj.static
+_static(obj::AbstractWorldObj) = _static(obj.wobj)
 
 function render(obj::AbstractWorldObj, draw_bbox::Bool)
     ##
@@ -307,7 +316,11 @@ end
 function transform_mesh(vlist::Array{Float32,3}, transformation_mat::Array{Float32,2})
     num_faces = size(vlist, 3)
     trans_vlist = map(i -> transform_mat(vlist[:, :, i], transformation_mat), 1:num_faces)
-    return cat(trans_vlist..., dims=3)
+    tvlist = deepcopy(trans_vlist[1])
+    for i in 2:num_faces
+        tvlist = cat(tvlist, trans_vlist[i], dims=3)
+    end
+    return tvlist
 end
 
 transform_mesh(obj_mesh::ObjectMesh, transformation_mat::Array{Float32,2}) =
@@ -626,7 +639,7 @@ function step!(tl_obj::TrafficLightObj, delta_time::Float32)
     ##
 
     tl_obj.time += delta_time
-    if round(tl_obj.time, 3) % tl_obj.freq == 0  # Swap patterns
+    if round(tl_obj.time, digits=3) % tl_obj.freq == 0  # Swap patterns
         tl_obj.pattern ⊻= 3
         tl_obj.wobj.mesh.textures[1] = tl_obj.texs[tl_obj.pattern]
     end
