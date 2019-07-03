@@ -317,13 +317,13 @@ function transform_mat(mat::Matrix{T}, transformation_mat::Matrix{T}) where T
 end
 
 function transform_mesh(vlist::Array{Float32,3}, transformation_mat::Array{Float32,2})
-    num_faces = size(vlist, 3)
+    w, h, num_faces = size(vlist)
     trans_vlist = map(i -> transform_mat(vlist[:, :, i], transformation_mat), 1:num_faces)
     tvlist = deepcopy(trans_vlist[1])
     for i in 2:num_faces
-        tvlist = cat(tvlist, trans_vlist[i], dims=3)
+        tvlist = hcat(tvlist, trans_vlist[i])
     end
-    return tvlist
+    return reshape(tvlist, w, h, num_faces)
 end
 
 transform_mesh(obj_mesh::ObjectMesh, transformation_mat::Array{Float32,2}) =
@@ -525,7 +525,7 @@ function DuckieObj(obj, domain_rand::Bool, safety_radius_mult::Float32, walk_dis
 
     time = 0f0
 
-    DuckieObj(wobj, pedestrian_wait_time, vel, heading, start, 
+    DuckieObj(wobj, pedestrian_wait_time, vel, heading, start,
               center, pedestrian_active, wiggle, time)
 end
 

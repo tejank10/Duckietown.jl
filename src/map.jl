@@ -90,7 +90,7 @@ function ObjectData(map_data::Dict, road_tile_size::Float32, domain_rand::Bool, 
         # Compute collision detection information
 
         # angle = rotate * (math.pi / 180)
-        
+
 	# Find drivable tiles object could intersect with
         possible_tiles = find_candidate_tiles(_obj_corners(obj), road_tile_size)
 
@@ -103,7 +103,7 @@ function ObjectData(map_data::Dict, road_tile_size::Float32, domain_rand::Bool, 
             collidable_safety_radii = vcat(collidable_safety_radii, [_safety_radius(obj)])
         end
     end
-   
+
     ObjectData(objects, collidable_centers, collidable_corners,
                collidable_norms, collidable_safety_radii)
 end
@@ -219,29 +219,29 @@ function _get_curve(grid::Vector{Union{Missing,Dict{String,Any}}}, i::Int, j::In
 
     # Rotate and align each curve with its place in global frame
     if startswith(kind, "4way")
-        fourway_pts = []
+
         # Generate all four sides' curves,
         # with 3-points template above
-        for rot in 0:3
-            mat = gen_rot_matrix([0f0, 1f0, 0f0], rot * Float32(π) / 2f0)
+		function size_gen(rot::Int)
+			mat = gen_rot_matrix([0f0, 1f0, 0f0], rot * Float32(π) / 2f0)
             pts_new = map(x -> x * mat, pts)
             add_vec = [(i-0.5f0) 0f0 (j-0.5f0);] * road_tile_size
-            pts_new = map(x -> x .+ add_vec, pts_new)
-            push!(fourway_pts, pts_new...)
-        end
-        return cat(fourway_pts..., dims=3)
+            return map(x -> x .+ add_vec, pts_new)
+		end
+
+		fourway_pts = hcat(vcat(map(rot->size_gen(rot), 0:3))...)
+        return reshape(fourway_pts..., 4, 3, :)
 
     # Hardcoded each curve; just rotate and shift
     elseif startswith(kind, "3way")
-        threeway_pts = []
         mat = gen_rot_matrix([0f0, 1f0, 0f0], angle * Float32(π) / 2f0)
         #NOTE: pts is 3D matrix, find a work around if * does not work
         pts_new = map(x -> x * mat, pts)
         add_vec = [(i-0.5f0) 0f0 (j-0.5f0);] * road_tile_size
         pts_new = map(x -> x .+ add_vec, pts_new)
-        push!(threeway_pts, pts_new...)
+        threeway_pts = hcat(pts_new)
 
-        return cat(threeway_pts..., dims=3)
+        return reshape(threeway_pts, 4, 3, :)
     else
         mat = gen_rot_matrix([0f0, 1f0, 0f0], angle * Float32(π) / 2f0)
         pts = map(x -> x * mat, pts)
@@ -249,7 +249,8 @@ function _get_curve(grid::Vector{Union{Missing,Dict{String,Any}}}, i::Int, j::In
         pts = map(x -> x .+ add_vec, pts)
     end
 
-    return cat(pts..., dims=3)
+	pts = hcat(pts...)
+    return reshape(pts, 4, 3, :)
 end
 #=
 struct tile
