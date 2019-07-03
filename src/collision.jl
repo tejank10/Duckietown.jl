@@ -1,4 +1,3 @@
-using LinearAlgebra
 using Statistics
 
 function agent_boundbox(true_pos, width, length, f_vec, r_vec)

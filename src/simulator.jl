@@ -441,7 +441,7 @@ function _proximity_penalty2(sim::Simulator, pos, angle)
         static_dist = 0
     # Find safety penalty w.r.t static obstacles
     else 
-        d = norm.(_collidable_vcenters(sim) .- [pos])
+        d = norm.(_collidable_centers(sim) .- [pos])
 
         if !safety_circle_intersection(d, AGENT_SAFETY_RAD, _collidable_safety_radii(sim))
             static_dist = 0
@@ -483,7 +483,7 @@ function update_physics(sim::Simulator, action, delta_time)
     # Update world objects
     objs = _objects(sim)
     for obj in objs
-        if !_static(obj) && obj.kind == "duckiebot"
+        if !_static(obj) && _kind(obj) == "duckiebot"
             obj_i, obj_j = get_grid_coords(_road_tile_size(sim), _pos(obj))
             cond(o) = get_grid_coords(_road_tile_size(sim), _pos(obj)) == (obj_i, obj_j) && o != obj
             same_tile_obj = filter(cond, objs)
@@ -591,7 +591,7 @@ end
 
 function draw_ground_road(fp::FixedSimParams)
     # Draw the ground quad
-    scene = []
+    scene = Vector{Triangle}()
     trans_mat = scale_mat([50f0, 1f0, 50f0])
     ground_vlist = transform_mat(_grid(fp).ground_vlist, trans_mat)
     ground_scene = triangulate_faces(ground_vlist, nothing, fp.ground_color)
@@ -607,7 +607,7 @@ function draw_ground_road(fp::FixedSimParams)
 
             isnothing(tile) && continue
 
-            # kind = tile['kind']
+            # kind = tile["kind"]
             angle = tile["angle"]
             color = tile["color"]
             texture = (color_diffuse = color,
@@ -652,14 +652,14 @@ function draw_ground_road(fp::FixedSimParams)
     return scene
 end
 
-function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
+function _render_img(fp::FixedSimParams, cur_pos::Vector{Float32}, cur_angle::Float32, top_down::Bool=true)
     ##
     #Render an image of the environment into a frame buffer
     #Produce a numpy RGB array image as output
     ##
 
     !fp.graphics && return
-    scene = []
+    scene = Vector{Triangle}()
 
     pos, angle = cur_pos, cur_angle
     if fp.domain_rand
@@ -674,8 +674,7 @@ function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
     elseif !top_down
         y += fp.cam_height
     end
-
-    cam = nothing
+ 
     cam_width, cam_height = fp.camera_width, fp.camera_height
     grid_width, grid_height = _grid(fp).grid_width, _grid(fp).grid_height
 
@@ -690,10 +689,12 @@ function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
         cam = Camera(eye, target, vup, fp.cam_fov_y, 1f0, cam_width, cam_height)
     else
         eye = Vec3([x], [y], [z])
-        target = Vec3([x+dx], [y+dy], [z+dz])
+	boost = fp.raytrace ? 1f0 : 100000000f0
+        target = Vec3([x + boost*dx], [y + boost*dy], [z + boost*dz])
         vup = Vec3([0f0], [1f0], [0f0])
         cam = Camera(eye, target, vup, fp.cam_fov_y, 1f0, cam_width, cam_height)
     end
+
 
     # For each object
     objs = _objects(fp)
@@ -722,7 +723,7 @@ function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
         trans_mat = scale_mat(1f0) * trans_mat
         trans_mat = rotate_mat(rad2deg(sim.cur_angle)) * trans_mat
         # glColor3f(*self.color)
-        #scene = vcat(scene, render(sim.fixedparams.mesh))
+        scene = vcat(scene, render(sim.fixedparams.mesh))
         #gl.glPopMatrix()
     end
 
@@ -760,7 +761,7 @@ function render_obs(sim::Simulator)
             sim.fixedparams,
             sim.cur_pos,
             sim.cur_angle,
-            false
+	    false
     )
     # Take only the viewable triangles for rendering
     observation = vcat(observation, viewable_scene(sim.scene, sim.cur_pos, sim.cur_angle))
@@ -771,32 +772,37 @@ function render_obs(sim::Simulator)
     #end
 
     # Setup some basic lighting with a far away sun
-    if sim.fixedparams.domain_rand
-        light_pos = sim.fixedparams.randomization_settings["light_pos"]
-        light_pos = Float32.(light_pos)
-        light_pos = Vec3(light_pos...)
+    if sim.fixedparams.raytrace
+        if sim.fixedparams.domain_rand
+            light_pos = sim.fixedparams.randomization_settings["light_pos"]
+            light_pos = Float32.(light_pos)
+            light_pos = Vec3(light_pos...)
+        else
+            light_pos = Vec3([-40f0], [200f0], [100f0])
+        end
+
+        ambient = _perturb(sim.fixedparams, Vec3([0.5f0]), 0.3f0)
+        # XXX: diffuse is not used?
+        diffuse = _perturb(sim.fixedparams, Vec3([0.7f0]), 0.3f0)
+        #=
+        from pyglet import gl
+        gl.glLightfv(gl.GL_LIGHT0, gl.GL_POSITION, (gl.GLfloat * 4)(*light_pos))
+        gl.glLightfv(gl.GL_LIGHT0, gl.GL_AMBIENT, (gl.GLfloat * 4)(*ambient))
+        gl.glLightfv(gl.GL_LIGHT0, gl.GL_DIFFUSE, (gl.GLfloat * 4)(0.5, 0.5, 0.5, 1.0))
+        gl.glEnable(gl.GL_LIGHT0)
+        gl.glEnable(gl.GL_LIGHTING)
+        gl.glEnable(gl.GL_COLOR_MATERIAL)
+        =#
+
+        #light = DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))
+        light = PointLight(Vec3([1f0]), 5f15, light_pos)
+        origin, direction = get_primary_rays(cam)
+
+        im = raytrace(origin, direction, observation, light, origin, 2)
     else
-        light_pos = Vec3([-40f0], [200f0], [100f0])
+        im = rasterize(cam, observation)
     end
 
-    ambient = _perturb(sim.fixedparams, Vec3([0.5f0]), 0.3f0)
-    # XXX: diffuse is not used?
-    diffuse = _perturb(sim.fixedparams, Vec3([0.7f0]), 0.3f0)
-    #=
-    from pyglet import gl
-    gl.glLightfv(gl.GL_LIGHT0, gl.GL_POSITION, (gl.GLfloat * 4)(*light_pos))
-    gl.glLightfv(gl.GL_LIGHT0, gl.GL_AMBIENT, (gl.GLfloat * 4)(*ambient))
-    gl.glLightfv(gl.GL_LIGHT0, gl.GL_DIFFUSE, (gl.GLfloat * 4)(0.5, 0.5, 0.5, 1.0))
-    gl.glEnable(gl.GL_LIGHT0)
-    gl.glEnable(gl.GL_LIGHTING)
-    gl.glEnable(gl.GL_COLOR_MATERIAL)
-    =#
-
-    #light = DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))
-    light = PointLight(Vec3([1f0]), 50000000f0, light_pos)#Vec3([0f0], [1f0], [0f0]))
-    origin, direction = get_primary_rays(cam)
-
-    im = raytrace(origin, direction, observation, light, origin, 2)
     color_r = reshape(im.x, sim.fixedparams.camera_width, sim.fixedparams.camera_height)
     color_g = reshape(im.y, sim.fixedparams.camera_width, sim.fixedparams.camera_height)
     color_b = reshape(im.z, sim.fixedparams.camera_width, sim.fixedparams.camera_height)

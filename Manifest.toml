@@ -466,8 +466,8 @@ uuid = "c84ed2f1-dad5-54f0-aa8e-dbefe2724439"
 version = "0.3.1"
 
 [[RayTracer]]
-deps = ["Distributed", "Flux", "IRTools", "Images", "Zygote"]
-git-tree-sha1 = "36686ab3776717d1b54fa35aaa00812eac2a17aa"
+deps = ["Distributed", "Flux", "IRTools", "ImageMagick", "Images", "Zygote"]
+git-tree-sha1 = "70d7dc067bed4c3f88e94a247256b0dd154fabb4"
 repo-rev = "ap/texture"
 repo-url = "https://github.com/avik-pal/RayTracer.jl"
 uuid = "60dacb86-48ff-11e9-0f01-03ab8794bbc9"

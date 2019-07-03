@@ -6,6 +6,7 @@ using Distributions
 using Random
 using RayTracer
 using Zygote
+using LinearAlgebra
 
 include("utils.jl")
 

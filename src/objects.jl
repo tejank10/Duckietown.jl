@@ -111,6 +111,9 @@ _safety_radius(obj::AbstractWorldObj) = _safety_radius(obj.wobj)
 _static(wobj::WorldObj) = wobj.static
 _static(obj::AbstractWorldObj) = _static(obj.wobj)
 
+_kind(wobj::WorldObj) = wobj.kind
+_kind(obj::AbstractWorldObj) = _kind(obj.wobj)
+
 function render(obj::AbstractWorldObj, draw_bbox::Bool)
     ##
     #Renders the object to screen
@@ -397,19 +400,19 @@ function DuckiebotObj(obj, domain_rand::Bool, safety_radius_mult::Float32,
                  radius, k, limit, wheel_dist, robot_width, robot_length)
 end
 
-function get_dir_vec(db_obj::DuckiebotObj, angle)
+function get_dir_vec(db_obj::DuckiebotObj, angle::Float32)
     x = cos(angle)
     z = -sin(angle)
     return [x, 0f0, z]
 end
 
-function get_right_vec(db_obj::DuckiebotObj, angle)
+function get_right_vec(db_obj::DuckiebotObj, angle::Float32)
     x = sin(angle)
     z = cos(angle)
     return [x, 0f0, z]
 end
 
-function check_collision(db_obj::DuckiebotObj, agent_corners, agent_norm)
+function check_collision(db_obj::DuckiebotObj, agent_corners::Matrix{Float32}, agent_norm::Matrix{Float32})
     ##
     #See if the agent collided with this object
     ##
@@ -445,7 +448,7 @@ function _update_pos(db_obj::DuckiebotObj, action::Vector{Float32}, deltaTime::F
 
     # If the wheel velocities are the same, then there is no rotation
     if u_l_limited == u_r_limited
-        db_obj.pos = db_obj.pos .+ deltaTime * u_l_limited * get_dir_vec(db_obj, db_obj.wobj.angle)
+        db_obj.wobj.pos = db_obj.wobj.pos .+ deltaTime * u_l_limited * get_dir_vec(db_obj, db_obj.wobj.angle)
         return
     end
 
@@ -460,21 +463,21 @@ function _update_pos(db_obj::DuckiebotObj, action::Vector{Float32}, deltaTime::F
 
     # Rotate the robot's position around the center of rotation
     r_vec = get_right_vec(db_obj, db_obj.wobj.angle)
-    px, py, pz = db_obj.pos
-    cx = px + r * r_vec
-    cz = pz + r * r_vec
+    px, py, pz = db_obj.wobj.pos
+    cx = px + r * r_vec[1]
+    cz = pz + r * r_vec[3]
     npx, npz = rotate_point(px, pz, cx, cz, rotAngle)
 
     # Update position
-    db_obj.pos = [npx, py, npz]
+    db_obj.wobj.pos = [npx, py, npz]
 
     # Update the robot's direction angle
     db_obj.wobj.angle += rotAngle
-    db_obj.wobj.y_rot += rand2deg(rotAngle)
+    db_obj.wobj.y_rot += rad2deg(rotAngle)
 
     # Recompute the bounding boxes (BB) for the duckiebot
     db_obj.wobj.obj_corners = agent_boundbox(
-        db_obj.pos,
+        db_obj.wobj.pos,
         db_obj.robot_width,
         db_obj.robot_length,
         get_dir_vec(db_obj, db_obj.wobj.angle),
@@ -484,13 +487,14 @@ end
 
 mutable struct DuckieObj <: AbstractWorldObj
     wobj::WorldObj
-    pedestrian_wait_time::Int
+    pedestrian_wait_time::Float32
     vel::Float32
     heading::Vector{Float32}
     start::Vector{Float32}
     center::Vector{Float32}
     pedestrian_active::Bool
-    wiggle::Int
+    wiggle::Float32
+    time::Float32
 end
 
 function DuckieObj(obj, domain_rand::Bool, safety_radius_mult::Float32, walk_distance::Float32)
@@ -502,10 +506,10 @@ function DuckieObj(obj, domain_rand::Bool, safety_radius_mult::Float32, walk_dis
 
     # Randomize velocity and wait time
     if wobj.domain_rand
-        pedestrian_wait_time = rand(3:19)
+        pedestrian_wait_time = Float32(rand(3:19))
         vel = abs(Float32(rand(Normal(0.02f0, 0.005f0))))
     else
-        pedestrian_wait_time = 8
+        pedestrian_wait_time = 8f0
         vel = 0.02f0
     end
 
@@ -516,16 +520,16 @@ function DuckieObj(obj, domain_rand::Bool, safety_radius_mult::Float32, walk_dis
     pedestrian_active = false
 
     # Walk wiggle parameter
-    wiggle = sample([14, 15, 16], 1)
+    wiggle = sample([14, 15, 16], 1)[1]
     wiggle = Float32(π / wiggle)
 
-    time = 0
+    time = 0f0
 
-    DuckieObj(wobj, pedestrian_wait_time, vel, heading,
-              start, center, pedestrian_active, wiggle)
+    DuckieObj(wobj, pedestrian_wait_time, vel, heading, start, 
+              center, pedestrian_active, wiggle, time)
 end
 
-function check_collision(dobj::DuckieObj, agent_corners, agent_norm)
+function check_collision(dobj::DuckieObj, agent_corners::Matrix{Float32}, agent_norm::Matrix{Float32})
     ##
     #See if the agent collided with this object
     ##
@@ -543,8 +547,8 @@ function proximity(db_obj::Obj, agent_pos::Vector{Float32}, agent_safety_rad::Fl
     #based on a heuristic for the "overlap" between
     #their safety circles
     ##
-    d = norm(agent_pos .- pos)
-    score = d - agent_safety_rad - self.safety_radius
+    d = norm(agent_pos .- db_obj.wobj.pos)
+    score = d - agent_safety_rad - db_obj.wobj.safety_radius
 
     return min(0f0, score)
 end

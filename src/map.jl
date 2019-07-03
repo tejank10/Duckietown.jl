@@ -223,10 +223,10 @@ function _get_curve(grid::Vector{Union{Missing,Dict{String,Any}}}, i::Int, j::In
         # Generate all four sides' curves,
         # with 3-points template above
         for rot in 0:3
-            mat = gen_rot_matrix([0f0, 1f0, 0f0], rot * π / 2f0)
+            mat = gen_rot_matrix([0f0, 1f0, 0f0], rot * Float32(π) / 2f0)
             pts_new = map(x -> x * mat, pts)
-            add_vec = [(i - 0.5f0) * road_tile_size 0f0 (j - 0.5f0) * road_tile_size;]
-            pts_new = map(x-> x .+ add_vec, pts_new)
+            add_vec = [(i-0.5f0) 0f0 (j-0.5f0);] * road_tile_size
+            pts_new = map(x -> x .+ add_vec, pts_new)
             push!(fourway_pts, pts_new...)
         end
         return cat(fourway_pts..., dims=3)
@@ -234,16 +234,16 @@ function _get_curve(grid::Vector{Union{Missing,Dict{String,Any}}}, i::Int, j::In
     # Hardcoded each curve; just rotate and shift
     elseif startswith(kind, "3way")
         threeway_pts = []
-        mat = gen_rot_matrix([0f0, 1f0, 0f0], angle * π / 2f0)
+        mat = gen_rot_matrix([0f0, 1f0, 0f0], angle * Float32(π) / 2f0)
         #NOTE: pts is 3D matrix, find a work around if * does not work
         pts_new = map(x -> x * mat, pts)
-        add_vec = [(i - 0.5f0) 0f0 (j - 0.5f0);] * road_tile_size
+        add_vec = [(i-0.5f0) 0f0 (j-0.5f0);] * road_tile_size
         pts_new = map(x -> x .+ add_vec, pts_new)
         push!(threeway_pts, pts_new...)
 
         return cat(threeway_pts..., dims=3)
     else
-        mat = gen_rot_matrix([0f0, 1f0, 0f0], angle * π / 2f0)
+        mat = gen_rot_matrix([0f0, 1f0, 0f0], angle * Float32(π) / 2f0)
         pts = map(x -> x * mat, pts)
         add_vec = [(i-0.5f0) 0f0 (j - 0.5f0);] * road_tile_size
         pts = map(x -> x .+ add_vec, pts)
