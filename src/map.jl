@@ -222,15 +222,15 @@ function _get_curve(grid::Vector{Union{Missing,Dict{String,Any}}}, i::Int, j::In
 
         # Generate all four sides' curves,
         # with 3-points template above
-		function size_gen(rot::Int)
-			mat = gen_rot_matrix([0f0, 1f0, 0f0], rot * Float32(π) / 2f0)
-            pts_new = map(x -> x * mat, pts)
+	function size_gen(rot::Int)
+	    mat = gen_rot_matrix([0f0, 1f0, 0f0], rot * Float32(π) / 2f0)
+      	    pts_new = map(x -> x * mat, pts)
             add_vec = [(i-0.5f0) 0f0 (j-0.5f0);] * road_tile_size
-            return map(x -> x .+ add_vec, pts_new)
-		end
+       	    return hcat(map(x -> x .+ add_vec, pts_new)...)
+	end
 
-		fourway_pts = hcat(vcat(map(rot->size_gen(rot), 0:3))...)
-        return reshape(fourway_pts..., 4, 3, :)
+	fourway_pts = hcat(map(rot->size_gen(rot), 0:3)...)
+        return reshape(fourway_pts, 4, 3, :)
 
     # Hardcoded each curve; just rotate and shift
     elseif startswith(kind, "3way")
@@ -239,7 +239,7 @@ function _get_curve(grid::Vector{Union{Missing,Dict{String,Any}}}, i::Int, j::In
         pts_new = map(x -> x * mat, pts)
         add_vec = [(i-0.5f0) 0f0 (j-0.5f0);] * road_tile_size
         pts_new = map(x -> x .+ add_vec, pts_new)
-        threeway_pts = hcat(pts_new)
+        threeway_pts = hcat(pts_new...)
 
         return reshape(threeway_pts, 4, 3, :)
     else
@@ -249,7 +249,7 @@ function _get_curve(grid::Vector{Union{Missing,Dict{String,Any}}}, i::Int, j::In
         pts = map(x -> x .+ add_vec, pts)
     end
 
-	pts = hcat(pts...)
+    pts = hcat(pts...)
     return reshape(pts, 4, 3, :)
 end
 #=
