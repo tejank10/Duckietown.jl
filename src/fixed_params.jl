@@ -34,7 +34,8 @@ mutable struct FixedSimParams <: RayTracer.FixedParams
     cam_angle::Vector
     cam_fov_y::Float32
     cam_offset::Vector
-    raytrace::Bool
+    raytrace::Bool	# If false, then uses rasterizer
+    train::Bool		# to incorporate some hacks for training purpose
 end
 
 function FixedSimParams(map_name::String=DEFAULT_MAP_NAME,
@@ -53,7 +54,8 @@ function FixedSimParams(map_name::String=DEFAULT_MAP_NAME,
                         seed=nothing,
                         distortion::Bool=false,
                         randomize_maps_on_reset::Bool=false,
-			raytrace::Bool=true)
+			raytrace::Bool=true
+			train::Bool=false)
     #=
     :param map_name:
     :param max_steps:
@@ -147,7 +149,7 @@ function FixedSimParams(map_name::String=DEFAULT_MAP_NAME,
                     accept_start_angle_deg, full_transparency, user_tile_start,
                     distortion, randomize_maps_on_reset, camera_model,
                     map_names, undistort, horizon_color, ground_color, wheel_dist, cam_height,
-                    cam_angle, cam_fov_y, cam_offset, raytrace)
+                    cam_angle, cam_fov_y, cam_offset, raytrace, train)
 end
 
 function reset!(fsp::FixedSimParams)

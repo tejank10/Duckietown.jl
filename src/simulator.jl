@@ -466,11 +466,15 @@ function update_physics(sim::Simulator, action, delta_time)
     prev_pos = sim.cur_pos
 
     # Update the robot's position
-    sim.cur_pos, sim.cur_angle = _update_pos(sim.cur_pos,
-                                             sim.cur_angle,
-                                             _wheel_dist(sim),
-                                             sim.wheelVels,
-                                             delta_time)
+
+    if _valid_pose(sim.fixedparams, sim.cur_pos, sim.cur_angle)
+        sim.cur_pos, sim.cur_angle = _update_pos(sim.cur_pos,
+                                                 sim.cur_angle,
+                                                 _wheel_dist(sim),
+                                                 sim.wheelVels,
+                                                 delta_time)
+    end
+
     sim.step_count += 1
     sim.timestamp += delta_time
 
@@ -567,7 +571,7 @@ end
 
 function _compute_done_reward(sim::Simulator)
     # If the agent is not in a valid pose (on drivable tiles)
-    if !_valid_pose(sim.fixedparams, sim.cur_pos, sim.cur_angle)
+    if !(sim.fixedparams.train || _valid_pose(sim.fixedparams, sim.cur_pos, sim.cur_angle))
         msg = "Stopping the simulator because we are at an invalid pose."
         #logger.info(msg)
         reward = REWARD_INVALID_POSE
@@ -698,8 +702,8 @@ function _render_img(fp::FixedSimParams, cur_pos::Vector{Float32}, cur_angle::Fl
         vup = Vec3([0f0], [0f0], [-1f0])
         cam = Camera(eye, target, vup, fp.cam_fov_y, 1f0, cam_width, cam_height)
     else
-        eye = Vec3([x+10f0*dx], [y+10f0*dy], [z+10f0*dz])
-	boost = fp.raytrace ? 1f0 : 15f0
+        eye = Vec3([x], [y], [z])
+	boost = fp.raytrace ? 1f0 : 1f0
         target = Vec3([x + boost*dx], [y + boost*dy], [z + boost*dz])
         vup = Vec3([0f0], [1f0], [0f0])
         cam = Camera(eye, target, vup, fp.cam_fov_y, 1f0, cam_width, cam_height)
@@ -917,7 +921,6 @@ function _update_pos(pos, angle, wheel_dist, wheelVels, deltaTime)
     #
     #returns new_pos, new_angle
     ##
-
     Vl, Vr = wheelVels
     l = wheel_dist
 
