@@ -143,7 +143,7 @@ function Simulator(map_name::String=DEFAULT_MAP_NAME, max_steps::Int=DEFAULT_MAX
 
     done = false
 
-    scene = draw_ground_road(fp)
+    scene = _render_img(fp, cur_pos, cur_angle, false)[1]
     sim = Simulator(last_action, wheelVels, speed, cur_pos, cur_angle,
                     step_count, timestamp, fp, scene, done)
 
@@ -589,10 +589,10 @@ function _compute_done_reward(sim::Simulator)
     return DoneRewardInfo(done, msg, reward, done_code)
 end
 
-function draw_ground_road(fp::FixedSimParams)
+function draw_ground_road(fp::FixedSimParams, mv_mat::Matrix{Float32})
     # Draw the ground quad
     scene = Vector{Triangle}()
-    trans_mat = scale_mat([50f0, 1f0, 50f0])
+    trans_mat = mv_mat * scale_mat([50f0, 1f0, 50f0])
     ground_vlist = transform_mat(_grid(fp).ground_vlist, trans_mat)
     ground_scene = triangulate_faces(ground_vlist, nothing, fp.ground_color)
     scene =  vcat(scene, ground_scene)
@@ -635,7 +635,7 @@ function draw_ground_road(fp::FixedSimParams)
                 dirVec = get_dir_vec(angle)
                 dot_prods = map(i->dot(curve_headings[:, i], dirVec), 1:size(curve_heading, 2))
                 dot_prods
-                # Current ("closest") curve drawn in Red
+                # Current (closest) curve drawn in Red
                 pts = curves[:, :, argmax(dot_prods)]
                 bezier_draw(pts, 20, true)
 
@@ -660,7 +660,10 @@ function _render_img(fp::FixedSimParams, cur_pos::Vector{Float32}, cur_angle::Fl
 
     !fp.graphics && return
     scene = Vector{Triangle}()
-
+    
+    # Projection Matrix
+    #proj_mat = projection_mat(fp.cam_fov_y, Float32(fp.camera_width/fp.camera_height), 0.04f0, 100f0)
+     proj_mat = Matrix{Float32}(I, 4, 4)
     pos, angle = cur_pos, cur_angle
     if fp.domain_rand
         pos = pos .+ fp.randomization_settings["camera_noise"]
@@ -668,11 +671,18 @@ function _render_img(fp::FixedSimParams, cur_pos::Vector{Float32}, cur_angle::Fl
 
     x, y, z = pos .+ fp.cam_offset
     dx, dy, dz = get_dir_vec(angle)
-
+    
+    # Modelview matrix
+    mv_mat = Matrix{Float32}(I, 4, 4)
+    
     if fp.draw_bbox
         y += 0.8f0
+	#mv_mat = rotate_mat(90f0, (1, 0, 0))
     elseif !top_down
         y += fp.cam_height
+	#mv_mat = rotate_mat(fp.cam_angle[1], (1, 0, 0))
+	#mv_mat = rotate_mat(fp.cam_angle[2], (0, 1, 0)) * mv_mat
+	#mv_mat = rotate_mat(fp.cam_angle[3], (0, 0, 1)) * mv_mat
     end
  
     cam_width, cam_height = fp.camera_width, fp.camera_height
@@ -688,19 +698,20 @@ function _render_img(fp::FixedSimParams, cur_pos::Vector{Float32}, cur_angle::Fl
         vup = Vec3([0f0], [0f0], [-1f0])
         cam = Camera(eye, target, vup, fp.cam_fov_y, 1f0, cam_width, cam_height)
     else
-        eye = Vec3([x], [y], [z])
-	boost = fp.raytrace ? 1f0 : 100000000f0
+        eye = Vec3([x+10f0*dx], [y+10f0*dy], [z+10f0*dz])
+	boost = fp.raytrace ? 1f0 : 15f0
         target = Vec3([x + boost*dx], [y + boost*dy], [z + boost*dz])
         vup = Vec3([0f0], [1f0], [0f0])
         cam = Camera(eye, target, vup, fp.cam_fov_y, 1f0, cam_width, cam_height)
     end
 
+    scene = vcat(scene, draw_ground_road(fp, proj_mat * mv_mat))
 
     # For each object
     objs = _objects(fp)
     if length(objs) > 0
         # Contains Vector{Vector{Δ}}
-        obj_Δs=filter(o->!isnothing(o), map(obj->render(obj, fp.draw_bbox), objs))
+        obj_Δs=filter(o->!isnothing(o), map(obj->render(obj, fp.draw_bbox, proj_mat * mv_mat), objs))
         for oΔ in obj_Δs
             scene = vcat(scene, oΔ)
         end
@@ -764,7 +775,7 @@ function render_obs(sim::Simulator)
 	    false
     )
     # Take only the viewable triangles for rendering
-    observation = vcat(observation, viewable_scene(sim.scene, sim.cur_pos, sim.cur_angle))
+    #observation = vcat(observation, viewable_scene(sim.scene, sim.cur_pos, sim.cur_angle))
     # self.undistort - for UndistortWrapper
     #NOTE: Not distorting as of now
     #if sim.distortion && !sim.undistort

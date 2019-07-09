@@ -114,7 +114,7 @@ _static(obj::AbstractWorldObj) = _static(obj.wobj)
 _kind(wobj::WorldObj) = wobj.kind
 _kind(obj::AbstractWorldObj) = _kind(obj.wobj)
 
-function render(obj::AbstractWorldObj, draw_bbox::Bool)
+function render(obj::AbstractWorldObj, draw_bbox::Bool, mv_mat::Matrix{Float32} = Matrix{Float32}(I, 4, 4))
     ##
     #Renders the object to screen
     ##
@@ -136,7 +136,7 @@ function render(obj::AbstractWorldObj, draw_bbox::Bool)
     #gl.glRotatef(self.y_rot, 0, 1, 0)
     #gl.glColor3f(*self.color)
 
-    transformation_mat = get_transformation_mat(_pos(obj), _scale(obj), _y_rot(obj), (0,1,0))
+    transformation_mat = mv_mat * get_transformation_mat(_pos(obj), _scale(obj), _y_rot(obj), (0,1,0))
     obj_mesh = _mesh(obj)
     transformed_vlists = transform_mesh(obj_mesh, transformation_mat)
     #let mesh store a matrix. make vec3 out of it only when you render
@@ -328,6 +328,16 @@ end
 
 transform_mesh(obj_mesh::ObjectMesh, transformation_mat::Array{Float32,2}) =
 map(vlist->transform_mesh(vlist, transformation_mat), obj_mesh.vlists)
+
+function projection_mat(fovy::T, aspect::T, zNear::T, zFar::T) where T<:Float32
+    f = cot(fovy/2f0)
+    r = zFar / zNear
+
+    proj_mat = [f/aspect   0f0    0f0             0f0;
+	        0f0        f      0f0             0f0;
+	        0f0        0f0   (r+1f0)/(1f0-r) -1f0;
+	        0f0        0f0  2f0*zFar/(1f0-r)  0f0]
+end
 
 # Below are the functions that need to
 # be reimplemented for any dynamic object
