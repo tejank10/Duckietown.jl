@@ -114,7 +114,7 @@ _static(obj::AbstractWorldObj) = _static(obj.wobj)
 _kind(wobj::WorldObj) = wobj.kind
 _kind(obj::AbstractWorldObj) = _kind(obj.wobj)
 
-function render(obj::AbstractWorldObj, draw_bbox::Bool, mv_mat::Matrix{Float32} = Matrix{Float32}(I, 4, 4))
+function render(obj::AbstractWorldObj, draw_bbox::Bool)
     ##
     #Renders the object to screen
     ##
@@ -136,7 +136,7 @@ function render(obj::AbstractWorldObj, draw_bbox::Bool, mv_mat::Matrix{Float32} 
     #gl.glRotatef(self.y_rot, 0, 1, 0)
     #gl.glColor3f(*self.color)
 
-    transformation_mat = mv_mat * get_transformation_mat(_pos(obj), _scale(obj), _y_rot(obj), (0,1,0))
+    transformation_mat = get_transformation_mat(_pos(obj), _scale(obj), _y_rot(obj), (0,1,0))
     obj_mesh = _mesh(obj)
     transformed_vlists = transform_mesh(obj_mesh, transformation_mat)
     #let mesh store a matrix. make vec3 out of it only when you render

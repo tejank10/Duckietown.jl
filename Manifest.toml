@@ -466,9 +466,9 @@ version = "0.3.1"
 
 [[RayTracer]]
 deps = ["Distributed", "Flux", "IRTools", "ImageMagick", "Images", "Statistics", "Zygote"]
-git-tree-sha1 = "babedd6634778e64a6608546caf4a2e613da03e5"
-repo-rev = "tk/patch1"
-repo-url = "https://github.com/tejank10/RayTracer.jl"
+git-tree-sha1 = "2c9aebf26e4031f6c23e6616b066c0083d29529e"
+repo-rev = "master"
+repo-url = "https://github.com/avik-pal/RayTracer.jl"
 uuid = "60dacb86-48ff-11e9-0f01-03ab8794bbc9"
 version = "0.1.0"
 

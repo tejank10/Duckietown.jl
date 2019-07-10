@@ -593,10 +593,10 @@ function _compute_done_reward(sim::Simulator)
     return DoneRewardInfo(done, msg, reward, done_code)
 end
 
-function draw_ground_road(fp::FixedSimParams, mv_mat::Matrix{Float32})
+function draw_ground_road(fp::FixedSimParams)
     # Draw the ground quad
     scene = Vector{Triangle}()
-    trans_mat = mv_mat * scale_mat([50f0, 1f0, 50f0])
+    trans_mat = scale_mat([50f0, 1f0, 50f0])
     ground_vlist = transform_mat(_grid(fp).ground_vlist, trans_mat)
     ground_scene = triangulate_faces(ground_vlist, nothing, fp.ground_color)
     scene =  vcat(scene, ground_scene)
@@ -665,9 +665,6 @@ function _render_img(fp::FixedSimParams, cur_pos::Vector{Float32}, cur_angle::Fl
     !fp.graphics && return
     scene = Vector{Triangle}()
     
-    # Projection Matrix
-    #proj_mat = projection_mat(fp.cam_fov_y, Float32(fp.camera_width/fp.camera_height), 0.04f0, 100f0)
-     proj_mat = Matrix{Float32}(I, 4, 4)
     pos, angle = cur_pos, cur_angle
     if fp.domain_rand
         pos = pos .+ fp.randomization_settings["camera_noise"]
@@ -681,12 +678,8 @@ function _render_img(fp::FixedSimParams, cur_pos::Vector{Float32}, cur_angle::Fl
     
     if fp.draw_bbox
         y += 0.8f0
-	#mv_mat = rotate_mat(90f0, (1, 0, 0))
     elseif !top_down
         y += fp.cam_height
-	#mv_mat = rotate_mat(fp.cam_angle[1], (1, 0, 0))
-	#mv_mat = rotate_mat(fp.cam_angle[2], (0, 1, 0)) * mv_mat
-	#mv_mat = rotate_mat(fp.cam_angle[3], (0, 0, 1)) * mv_mat
     end
  
     cam_width, cam_height = fp.camera_width, fp.camera_height
@@ -708,13 +701,13 @@ function _render_img(fp::FixedSimParams, cur_pos::Vector{Float32}, cur_angle::Fl
         cam = Camera(eye, target, vup, fp.cam_fov_y, focus, cam_width, cam_height)
     end
 
-    scene = vcat(scene, draw_ground_road(fp, proj_mat * mv_mat))
+    scene = vcat(scene, draw_ground_road(fp))
 
     # For each object
     objs = _objects(fp)
     if length(objs) > 0
         # Contains Vector{Vector{Δ}}
-        obj_Δs=filter(o->!isnothing(o), map(obj->render(obj, fp.draw_bbox, proj_mat * mv_mat), objs))
+        obj_Δs=filter(o->!isnothing(o), map(obj->render(obj, fp.draw_bbox), objs))
         for oΔ in obj_Δs
             scene = vcat(scene, oΔ)
         end
