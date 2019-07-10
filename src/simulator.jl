@@ -691,7 +691,7 @@ function _render_img(fp::FixedSimParams, cur_pos::Vector{Float32}, cur_angle::Fl
  
     cam_width, cam_height = fp.camera_width, fp.camera_height
     grid_width, grid_height = _grid(fp).grid_width, _grid(fp).grid_height
-
+    focus = fp.raytrace ? 1f0 : 20f0
     if top_down
         x = (grid_width * _road_tile_size(fp)) / 2f0
         y = 5f0
@@ -700,13 +700,12 @@ function _render_img(fp::FixedSimParams, cur_pos::Vector{Float32}, cur_angle::Fl
         eye = Vec3([x], [y], [z])
         target = Vec3([x], [0f0], [z])
         vup = Vec3([0f0], [0f0], [-1f0])
-        cam = Camera(eye, target, vup, fp.cam_fov_y, 1f0, cam_width, cam_height)
+        cam = Camera(eye, target, vup, fp.cam_fov_y, focus, cam_width, cam_height)
     else
         eye = Vec3([x], [y], [z])
-	boost = fp.raytrace ? 1f0 : 1f0
-        target = Vec3([x + boost*dx], [y + boost*dy], [z + boost*dz])
+        target = Vec3([x + dx], [y + dy], [z + dz])
         vup = Vec3([0f0], [1f0], [0f0])
-        cam = Camera(eye, target, vup, fp.cam_fov_y, 1f0, cam_width, cam_height)
+        cam = Camera(eye, target, vup, fp.cam_fov_y, focus, cam_width, cam_height)
     end
 
     scene = vcat(scene, draw_ground_road(fp, proj_mat * mv_mat))
