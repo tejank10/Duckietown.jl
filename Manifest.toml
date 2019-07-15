@@ -13,10 +13,10 @@ uuid = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
 version = "0.2.1"
 
 [[Adapt]]
-deps = ["LinearAlgebra", "Test"]
-git-tree-sha1 = "53d8fec4f662088c1202530e338a11a919407f3b"
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "82dab828020b872fa9efd3abec1152b075bc7cbf"
 uuid = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
-version = "0.4.2"
+version = "1.0.0"
 
 [[Arpack]]
 deps = ["BinaryProvider", "Libdl", "LinearAlgebra"]
@@ -195,12 +195,6 @@ git-tree-sha1 = "351f001a78aa1b7ad2696e386e110b5abd071c71"
 uuid = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 version = "1.0.7"
 
-[[FillArrays]]
-deps = ["LinearAlgebra", "Random", "SparseArrays", "Test"]
-git-tree-sha1 = "9ab8f76758cbabba8d7f103c51dce7f73fcf8e92"
-uuid = "1a297f60-69ca-5386-bcde-b61e274b549b"
-version = "0.6.3"
-
 [[FixedPointNumbers]]
 git-tree-sha1 = "d14a6fa5890ea3a7e5dcab6811114f132fec2b4b"
 uuid = "53c48c17-4a7d-5ca2-90c5-79b7896eea93"
@@ -236,11 +230,11 @@ version = "0.1.0"
 
 [[IRTools]]
 deps = ["InteractiveUtils", "MacroTools", "Test"]
-git-tree-sha1 = "d489ba2fc86d4ab1194e2998b008a6b32fdd9ec4"
-repo-rev = "master"
+git-tree-sha1 = "ed5530d6cd0fb9f5223da36f70cf856c04fcbb62"
+repo-rev = "5c0d45a"
 repo-url = "https://github.com/MikeInnes/IRTools.jl.git"
 uuid = "7869d1d1-7146-5819-86e3-90919afe41df"
-version = "0.2.2"
+version = "0.2.1"
 
 [[IdentityRanges]]
 deps = ["OffsetArrays", "Test"]
@@ -361,10 +355,10 @@ uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
 [[MacroTools]]
-deps = ["CSTParser", "Compat", "DataStructures", "Test"]
-git-tree-sha1 = "daecd9e452f38297c686eba90dba2a6d5da52162"
+deps = ["CSTParser", "Compat", "DataStructures", "Test", "Tokenize"]
+git-tree-sha1 = "d6e9dedb8c92c3465575442da456aec15a89ff76"
 uuid = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
-version = "0.5.0"
+version = "0.5.1"
 
 [[MappedArrays]]
 deps = ["Test"]
@@ -466,7 +460,7 @@ version = "0.3.1"
 
 [[RayTracer]]
 deps = ["Distributed", "Flux", "IRTools", "ImageMagick", "Images", "Statistics", "Zygote"]
-git-tree-sha1 = "2c9aebf26e4031f6c23e6616b066c0083d29529e"
+git-tree-sha1 = "a4416b562f64cbbfc321fdaf381f4948943d2417"
 repo-rev = "master"
 repo-url = "https://github.com/avik-pal/RayTracer.jl"
 uuid = "60dacb86-48ff-11e9-0f01-03ab8794bbc9"
@@ -628,9 +622,9 @@ uuid = "a5390f91-8eb1-5f08-bee0-b1d1ffed6cea"
 version = "0.8.3"
 
 [[Zygote]]
-deps = ["DiffRules", "FFTW", "FillArrays", "ForwardDiff", "IRTools", "InteractiveUtils", "LinearAlgebra", "MacroTools", "NNlib", "NaNMath", "Random", "Requires", "SpecialFunctions", "Statistics"]
-git-tree-sha1 = "db371a793675f3f3deeb4576087d8deca84a2a08"
-repo-rev = "master"
+deps = ["DiffRules", "ForwardDiff", "IRTools", "InteractiveUtils", "LinearAlgebra", "MacroTools", "NNlib", "NaNMath", "Random", "Requires", "SpecialFunctions", "Statistics"]
+git-tree-sha1 = "90b1b474945674ec371f4fd8cb43de6297c6280c"
+repo-rev = "a2efc32"
 repo-url = "https://github.com/FluxML/Zygote.jl.git"
 uuid = "e88e6eb3-aa80-5325-afca-941959d7151f"
-version = "0.3.2"
+version = "0.3.1"
