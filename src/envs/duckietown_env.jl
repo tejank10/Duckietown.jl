@@ -12,9 +12,9 @@ struct DuckietownEnv
     limit::Float32
 end
 
-function DuckietownEnv(gain::Float32=1f0, trim::Float32=0f0, radius::Float32=0.0318f0,
-                       k::Float32=27f0, limit::Float32=1f0; kwargs...)
-    sim = Simulator(kwargs...)
+function DuckietownEnv(; gain::Float32=1f0, trim::Float32=0f0, radius::Float32=0.0318f0,
+                       k::Float32=27f0, limit::Float32=1f0, kwargs...)
+    sim = Simulator(; kwargs...)
     #logger.info('using DuckietownEnv')
     return DuckietownEnv(sim, gain, trim, radius, k, limit)    
 end
