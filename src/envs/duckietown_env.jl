@@ -1,3 +1,5 @@
+export DuckietownEnv, DuckietownLF, DuckietownNav
+
 ##
 #Wrapper to control the simulator using velocity and steering angle
 #instead of differential drive motor velocities
