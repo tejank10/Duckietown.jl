@@ -128,7 +128,7 @@ end
 
 @diffops Simulator
 
-function Simulator(map_name::String=DEFAULT_MAP_NAME, max_steps::Int=DEFAULT_MAX_STEPS; kwargs...)
+function Simulator(; map_name::String=DEFAULT_MAP_NAME, max_steps::Int=DEFAULT_MAX_STEPS, kwargs...)
     fp = FixedSimParams(map_name, max_steps; kwargs...)
     cur_pos, cur_angle = reset!(fp)
 

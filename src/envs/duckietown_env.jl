@@ -70,7 +70,7 @@ struct DuckietownLF
     dt_env::DuckietownEnv
 end
 
-DuckietownLF(kwargs...) = DuckietownLF(DuckietownEnv(kwargs...))
+DuckietownLF(; kwargs...) = DuckietownLF(DuckietownEnv(; kwargs...))
 
 reset!(dt_lf::DuckietownLF) = reset!(dt_lf.dt_env)
 
@@ -84,9 +84,9 @@ struct DuckietownNav
     goal_tile::Union{Nothing, Dict{String,Any}
 end
 
-function DuckietownNav(kwargs...)
+function DuckietownNav(; kwargs...)
     goal_tile = nothing
-    DuckietownNav(DuckietownEnv(kwargs...), goal_tile)
+    DuckietownNav(DuckietownEnv(; kwargs...), goal_tile)
 end
 
 function reset!(dt_nav::DuckietownNav)
