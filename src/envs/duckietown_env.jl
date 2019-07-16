@@ -81,7 +81,7 @@ step!(dt_lf::DuckietownLF, action::Vector{Float32}) = step!(dt_lf.dt_env, action
 ##
 struct DuckietownNav
     dt_env::DuckietownEnv
-    goal_tile::Union{Nothing, Dict{String,Any}
+    goal_tile::Union{Nothing, Dict{String,Any}}
 end
 
 function DuckietownNav(; kwargs...)
