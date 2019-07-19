@@ -684,7 +684,10 @@ function _render_img(fp::FixedSimParams, cur_pos::Vector{Float32}, cur_angle::Fl
  
     cam_width, cam_height = fp.camera_width, fp.camera_height
     grid_width, grid_height = _grid(fp).grid_width, _grid(fp).grid_height
-    focus = fp.raytrace ? 1f0 : 0.02f0
+    
+    # Focal length for raytrace is 1m while that for rasterization is 20mm
+    focus = fp.raytrace ? 1f0 : 20f0
+
     if top_down
         x = (grid_width * _road_tile_size(fp)) / 2f0
         y = 5f0
@@ -807,7 +810,8 @@ function render_obs(sim::Simulator)
 
         im = raytrace(origin, direction, observation, light, origin, 2)
     else
-       im = rasterize(cam, observation, 0.04f0, 100f0)
+        @warn "Rasterization may not work perfectly"
+        im = rasterize(cam, observation, 0.04f0, 100f0)
     end
 
     color_r = reshape(im.x, sim.fixedparams.camera_width, sim.fixedparams.camera_height)
