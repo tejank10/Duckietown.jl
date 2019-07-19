@@ -1,6 +1,6 @@
 # Duckietown.jl
 
-![](https://media.giphy.com/media/d7g6mag5WQjOOpqlJw/giphy.gif)
+![](https://media.giphy.com/media/d7g6mag5WQjOOpqlJw/giphy-downsized-large.gif)
 
 Differentiable [Duckietown](https://duckietown.org) [simulator](https://github.com/duckietown/gym-duckietown)
 
