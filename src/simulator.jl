@@ -128,7 +128,7 @@ end
 
 @diffops Simulator
 
-function Simulator(map_name::String=DEFAULT_MAP_NAME, max_steps::Int=DEFAULT_MAX_STEPS; kwargs...)
+function Simulator(; map_name::String=DEFAULT_MAP_NAME, max_steps::Int=DEFAULT_MAX_STEPS, kwargs...)
     fp = FixedSimParams(map_name, max_steps; kwargs...)
     cur_pos, cur_angle = reset!(fp)
 
@@ -143,7 +143,7 @@ function Simulator(map_name::String=DEFAULT_MAP_NAME, max_steps::Int=DEFAULT_MAX
 
     done = false
 
-    scene = draw_ground_road(fp)
+    scene = _render_img(fp, cur_pos, cur_angle, false)[1]
     sim = Simulator(last_action, wheelVels, speed, cur_pos, cur_angle,
                     step_count, timestamp, fp, scene, done)
 
@@ -210,12 +210,14 @@ _collidable_norms(map::Map) = _collidable_norms(map._grid)
 _collidable_norms(fp::FixedSimParams) = _collidable_norms(fp._map)
 _collidable_norms(sim::Simulator) = _collidable_norms(sim.fixedparams)
 
-_collidable_centers(grid::Grid) = grid.obj_data.collidable_corners
+_collidable_centers(grid::Grid) = grid.obj_data.collidable_centers
 _collidable_centers(map::Map) = _collidable_centers(map._grid)
 _collidable_centers(fp::FixedSimParams) = _collidable_centers(fp._map)
 _collidable_centers(sim::Simulator) = _collidable_centers(sim.fixedparams)
 
-_collidable_safety_radii(fp::FixedSimParams) = fp.collidable_safety_radii
+_collidable_safety_radii(grid::Grid) = grid.obj_data.collidable_safety_radii
+_collidable_safety_radii(map::Map) = _collidable_safety_radii(map._grid)
+_collidable_safety_radii(fp::FixedSimParams) = _collidable_safety_radii(fp._map)
 _collidable_safety_radii(sim::Simulator) = _collidable_safety_radii(sim.fixedparams)
 
 _delta_time(fp::FixedSimParams) = fp.delta_time
@@ -233,40 +235,6 @@ _wheel_dist(sim::Simulator) = _wheel_dist(sim.fixedparams)
 _full_transparency(fp::FixedSimParams) = fp.full_transparency
 _full_transparency(sim::Simulator) = _full_transparency(sim.fixedparams)
 
-
-function _init_vlists(road_tile_size)
-    # Create the vertex list for our road quad
-    # Note: the vertices are centered around the origin so we can easily
-    # rotate the tiles about their center
-    half_size = road_tile_size / 2f0
-    verts = [
-        -half_size 0f0 -half_size;
-         half_size 0f0 -half_size;
-         half_size 0f0  half_size;
-        -half_size 0f0  half_size
-    ]
-    texCoords = [
-        1f0 0f0;
-        0f0 0f0;
-        0f0 1f0;
-        1f0 1f0
-    ]
-
-    road_vlist = verts
-    road_tlist = texCoords
-
-    # Create the vertex list for the ground quad
-    verts = [
-        -1 -0.8f0  1;
-        -1 -0.8f0 -1;
-         1 -0.8f0 -1;
-         1 -0.8f0  1
-    ]
-
-    ground_vlist = verts
-
-    return road_vlist, road_tlist, ground_vlist
-end
 
 function closest_curve_point(fp::FixedSimParams, pos, angle)
     ##
@@ -376,8 +344,8 @@ end
 
 function close(sim::Simulator) end
 
-function _collidable_object(grid, grid_width, grid_height, obj_corners, obj_norm,
-                            possible_tiles, road_tile_size)
+function _collidable_object(grid, grid_width, grid_height, obj_corners::Array{Float32,2}, obj_norm,
+                            possible_tiles, road_tile_size::Float32)
     ##
     #A function to check if an object intersects with any
     #drivable tiles, which would mean our agent could run into them.
@@ -385,11 +353,11 @@ function _collidable_object(grid, grid_width, grid_height, obj_corners, obj_norm
     ##
 
     size(possible_tiles) == (0,) && (return false)
-    drivable_tiles = []
+    drivable_tiles = Vector{NTuple{2,Int}}()
     for c in possible_tiles
         tile = _get_tile(grid, c..., grid_width, grid_height)
-        if !ismissing(tile) && tile["drivable"]
-            push!(drivable_tiles, (c...))
+        if !ismissing(tile) && !isnothing(tile) && tile["drivable"]
+            drivable_tiles = vcat(drivable_tiles, [Tuple(c)])
         end
     end
     isempty(drivable_tiles) && (return false)
@@ -398,12 +366,11 @@ function _collidable_object(grid, grid_width, grid_height, obj_corners, obj_norm
     tile_norms = repeat([1f0 0f0; 0f0 1f0],  length(drivable_tiles))
 
     # Find the corners for each candidate tile
-    drivable_tiles = [permutedims(
+    drivable_tiles = map(pt->permutedims(
         tile_corners(
                 _get_tile(grid, pt..., grid_width, grid_height)["coords"],
                 road_tile_size
-        )) for pt in drivable_tiles
-    ]
+        )), drivable_tiles)
 
     # Stack doesn't do anything if there's only one object,
     # So we add an extra dimension to avoid shape errors later
@@ -411,6 +378,7 @@ function _collidable_object(grid, grid_width, grid_height, obj_corners, obj_norm
         tile_norms = [tile_norms]
     end
     # Only add it if one of the vertices is on a drivable tile
+
     return intersects(obj_corners, drivable_tiles, obj_norm, tile_norms)
 end
 
@@ -472,8 +440,8 @@ function _proximity_penalty2(sim::Simulator, pos, angle)
     if length(_collidable_centers(sim)) == 0
         static_dist = 0
     # Find safety penalty w.r.t static obstacles
-    else
-        d = norm(_collidable_centers(sim) .- pos, dims=2)
+    else 
+        d = Float32.(norm.(_collidable_centers(sim) .- [pos]))
 
         if !safety_circle_intersection(d, AGENT_SAFETY_RAD, _collidable_safety_radii(sim))
             static_dist = 0
@@ -498,11 +466,15 @@ function update_physics(sim::Simulator, action, delta_time)
     prev_pos = sim.cur_pos
 
     # Update the robot's position
-    sim.cur_pos, sim.cur_angle = _update_pos(sim.cur_pos,
-                                             sim.cur_angle,
-                                             _wheel_dist(sim),
-                                             sim.wheelVels,
-                                             delta_time)
+
+    if _valid_pose(sim.fixedparams, sim.cur_pos, sim.cur_angle)
+        sim.cur_pos, sim.cur_angle = _update_pos(sim.cur_pos,
+                                                 sim.cur_angle,
+                                                 _wheel_dist(sim),
+                                                 sim.wheelVels,
+                                                 delta_time)
+    end
+
     sim.step_count += 1
     sim.timestamp += delta_time
 
@@ -515,9 +487,9 @@ function update_physics(sim::Simulator, action, delta_time)
     # Update world objects
     objs = _objects(sim)
     for obj in objs
-        if !obj.static && obj.kind == "duckiebot"
-            obj_i, obj_j = get_grid_coords(_road_tile_size(sim), obj.pos)
-            cond(o) = get_grid_coords(_road_tile_size(sim), o.pos) == (obj_i, obj_j) && o != obj
+        if !_static(obj) && _kind(obj) == "duckiebot"
+            obj_i, obj_j = get_grid_coords(_road_tile_size(sim), _pos(obj))
+            cond(o) = get_grid_coords(_road_tile_size(sim), _pos(obj)) == (obj_i, obj_j) && o != obj
             same_tile_obj = filter(cond, objs)
             step!(obj, delta_time, sim.fixedparams, closest_curve_point, same_tile_obj)
         else
@@ -599,7 +571,7 @@ end
 
 function _compute_done_reward(sim::Simulator)
     # If the agent is not in a valid pose (on drivable tiles)
-    if !_valid_pose(sim.fixedparams, sim.cur_pos, sim.cur_angle)
+    if !(sim.fixedparams.train || _valid_pose(sim.fixedparams, sim.cur_pos, sim.cur_angle))
         msg = "Stopping the simulator because we are at an invalid pose."
         #logger.info(msg)
         reward = REWARD_INVALID_POSE
@@ -623,14 +595,14 @@ end
 
 function draw_ground_road(fp::FixedSimParams)
     # Draw the ground quad
-    scene = []
+    scene = Vector{Triangle}()
     trans_mat = scale_mat([50f0, 1f0, 50f0])
     ground_vlist = transform_mat(_grid(fp).ground_vlist, trans_mat)
-    ground_scene = triangulate_faces(ground_vlist, fp.ground_color)
+    ground_scene = triangulate_faces(ground_vlist, nothing, fp.ground_color)
     scene =  vcat(scene, ground_scene)
 
     grid_width, grid_height = _grid(fp).grid_width, _grid(fp).grid_height
-
+    
     # For each grid tile
     for j in 1:grid_height
         for i in 1:grid_width
@@ -639,10 +611,16 @@ function draw_ground_road(fp::FixedSimParams)
 
             isnothing(tile) && continue
 
-            # kind = tile['kind']
+            # kind = tile["kind"]
             angle = tile["angle"]
             color = tile["color"]
-            #texture = tile["texture"]
+            texture = (color_diffuse = color,
+                       color_ambient = Vec3(1.0f0),
+                       color_specular = Vec3(1.0f0),
+                       specular_exponent = 50.0f0,
+                       texture_ambient = nothing,
+                       texture_diffuse = tile["texture"],
+                       texture_specular = nothing)
 
             pos = [(i-0.5f0), 0f0, (j-0.5f0)] * _road_tile_size(fp)
             trans_mat = translation_mat(pos)
@@ -650,8 +628,9 @@ function draw_ground_road(fp::FixedSimParams)
 
             # Bind the appropriate texture
             road_vlist = _grid(fp).road_vlist
+            road_tlist = _grid(fp).road_tlist
             road_vlist = transform_mat(road_vlist, trans_mat)
-            scene = vcat(scene, triangulate_faces(road_vlist, color))
+            scene = vcat(scene, triangulate_faces(road_vlist, road_tlist, color, texture))
             if tile["drivable"] && fp.draw_curve
                 # Find curve with largest dotproduct with heading
                 curves = _get_tile(_grid(fp), i, j)["curves"]
@@ -660,7 +639,7 @@ function draw_ground_road(fp::FixedSimParams)
                 dirVec = get_dir_vec(angle)
                 dot_prods = map(i->dot(curve_headings[:, i], dirVec), 1:size(curve_heading, 2))
                 dot_prods
-                # Current ("closest") curve drawn in Red
+                # Current (closest) curve drawn in Red
                 pts = curves[:, :, argmax(dot_prods)]
                 bezier_draw(pts, 20, true)
 
@@ -673,19 +652,19 @@ function draw_ground_road(fp::FixedSimParams)
             end
         end
     end
-
+    
     return scene
 end
 
-function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
+function _render_img(fp::FixedSimParams, cur_pos::Vector{Float32}, cur_angle::Float32, top_down::Bool=true)
     ##
     #Render an image of the environment into a frame buffer
     #Produce a numpy RGB array image as output
     ##
 
     !fp.graphics && return
-    scene = []
-
+    scene = Vector{Triangle}()
+    
     pos, angle = cur_pos, cur_angle
     if fp.domain_rand
         pos = pos .+ fp.randomization_settings["camera_noise"]
@@ -693,16 +672,21 @@ function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
 
     x, y, z = pos .+ fp.cam_offset
     dx, dy, dz = get_dir_vec(angle)
-
+    
+    # Modelview matrix
+    #mv_mat = Matrix{Float32}(I, 4, 4)
+    
     if fp.draw_bbox
         y += 0.8f0
     elseif !top_down
         y += fp.cam_height
     end
-
-    cam = nothing
+ 
     cam_width, cam_height = fp.camera_width, fp.camera_height
     grid_width, grid_height = _grid(fp).grid_width, _grid(fp).grid_height
+    
+    # Focal length for raytrace is 1m while that for rasterization is 20mm
+    focus = fp.raytrace ? 1f0 : 20f0
 
     if top_down
         x = (grid_width * _road_tile_size(fp)) / 2f0
@@ -712,20 +696,26 @@ function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
         eye = Vec3([x], [y], [z])
         target = Vec3([x], [0f0], [z])
         vup = Vec3([0f0], [0f0], [-1f0])
-        cam = Camera(eye, target, vup, fp.cam_fov_y, 1f0, cam_width, cam_height)
+        cam = Camera(eye, target, vup, fp.cam_fov_y, focus, cam_width, cam_height)
     else
         eye = Vec3([x], [y], [z])
-        target = Vec3([x+dx], [y+dy], [z+dz])
+        target = Vec3([x + dx], [y + dy], [z + dz])
         vup = Vec3([0f0], [1f0], [0f0])
-        cam = Camera(eye, target, vup, fp.cam_fov_y, 1f0, cam_width, cam_height)
+        cam = Camera(eye, target, vup, fp.cam_fov_y, focus, cam_width, cam_height)
     end
+
+    scene = vcat(scene, draw_ground_road(fp))
 
     # For each object
     objs = _objects(fp)
     if length(objs) > 0
-        scene = vcat(scene, map(obj->render(obj, fp.draw_bbox), _objects(fp))...)
+        # Contains Vector{Vector{Δ}}
+        obj_Δs=filter(o->!isnothing(o), map(obj->render(obj, fp.draw_bbox), objs))
+        for oΔ in obj_Δs
+            scene = vcat(scene, oΔ)
+        end
     end
-
+    
     # Draw the agent's own bounding box
     if fp.draw_bbox
         #corners = get_agent_corners(pos, angle)
@@ -743,7 +733,7 @@ function _render_img(fp::FixedSimParams, cur_pos, cur_angle, top_down=true)
         trans_mat = scale_mat(1f0) * trans_mat
         trans_mat = rotate_mat(rad2deg(sim.cur_angle)) * trans_mat
         # glColor3f(*self.color)
-        #scene = vcat(scene, render(sim.fixedparams.mesh))
+        scene = vcat(scene, render(sim.fixedparams.mesh))
         #gl.glPopMatrix()
     end
 
@@ -781,13 +771,10 @@ function render_obs(sim::Simulator)
             sim.fixedparams,
             sim.cur_pos,
             sim.cur_angle,
-            #sim.multi_fbo,
-            #sim.final_fbo,
-            false
+	    false
     )
-
     # Take only the viewable triangles for rendering
-    observation = vcat(observation, viewable_scene(sim.scene, sim.cur_pos, sim.cur_angle))
+    #observation = vcat(observation, viewable_scene(sim.scene, sim.cur_pos, sim.cur_angle))
     # self.undistort - for UndistortWrapper
     #NOTE: Not distorting as of now
     #if sim.distortion && !sim.undistort
@@ -795,18 +782,38 @@ function render_obs(sim::Simulator)
     #end
 
     # Setup some basic lighting with a far away sun
-    #TODO: See this later, use raytracer's light example
-    if sim.fixedparams.domain_rand
-        light_pos = Vec3(sim.fixedparams.randomization_settings["light_pos"]...)
+    if sim.fixedparams.raytrace
+        if sim.fixedparams.domain_rand
+            light_pos = sim.fixedparams.randomization_settings["light_pos"]
+            light_pos = Float32.(light_pos)
+            light_pos = Vec3(light_pos...)
+        else
+            light_pos = Vec3([-40f0], [200f0], [100f0])
+        end
+
+        ambient = _perturb(sim.fixedparams, Vec3([0.5f0]), 0.3f0)
+        # XXX: diffuse is not used?
+        diffuse = _perturb(sim.fixedparams, Vec3([0.7f0]), 0.3f0)
+        #=
+        from pyglet import gl
+        gl.glLightfv(gl.GL_LIGHT0, gl.GL_POSITION, (gl.GLfloat * 4)(*light_pos))
+        gl.glLightfv(gl.GL_LIGHT0, gl.GL_AMBIENT, (gl.GLfloat * 4)(*ambient))
+        gl.glLightfv(gl.GL_LIGHT0, gl.GL_DIFFUSE, (gl.GLfloat * 4)(0.5, 0.5, 0.5, 1.0))
+        gl.glEnable(gl.GL_LIGHT0)
+        gl.glEnable(gl.GL_LIGHTING)
+        gl.glEnable(gl.GL_COLOR_MATERIAL)
+        =#
+
+        #light = DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))
+        light = PointLight(Vec3([1f0]), 5f15, light_pos)
+        origin, direction = get_primary_rays(cam)
+
+        im = raytrace(origin, direction, observation, light, origin, 2)
     else
-        light_pos = Vec3([-40f0], [200f0], [100f0])
+        @warn "Rasterization may not work perfectly"
+        im = rasterize(cam, observation, 0.04f0, 100f0)
     end
 
-    light = DistantLight(Vec3([1f0]), 5000f0, Vec3([0f0], [1f0], [0f0]))
-
-    origin, direction = get_primary_rays(cam)
-
-    im = raytrace(origin, direction, observation, light, origin, 2)
     color_r = reshape(im.x, sim.fixedparams.camera_width, sim.fixedparams.camera_height)
     color_g = reshape(im.y, sim.fixedparams.camera_width, sim.fixedparams.camera_height)
     color_b = reshape(im.z, sim.fixedparams.camera_width, sim.fixedparams.camera_height)
@@ -910,7 +917,6 @@ function _update_pos(pos, angle, wheel_dist, wheelVels, deltaTime)
     #
     #returns new_pos, new_angle
     ##
-
     Vl, Vr = wheelVels
     l = wheel_dist
 

@@ -34,6 +34,8 @@ mutable struct FixedSimParams <: RayTracer.FixedParams
     cam_angle::Vector
     cam_fov_y::Float32
     cam_offset::Vector
+    raytrace::Bool	# If false, then uses rasterizer
+    train::Bool		# to incorporate some hacks for training purpose
 end
 
 function FixedSimParams(map_name::String=DEFAULT_MAP_NAME,
@@ -51,7 +53,9 @@ function FixedSimParams(map_name::String=DEFAULT_MAP_NAME,
                         user_tile_start=nothing,
                         seed=nothing,
                         distortion::Bool=false,
-                        randomize_maps_on_reset::Bool=false)
+                        randomize_maps_on_reset::Bool=false,
+			raytrace::Bool=true,
+			train::Bool=false)
     #=
     :param map_name:
     :param max_steps:
@@ -76,8 +80,11 @@ function FixedSimParams(map_name::String=DEFAULT_MAP_NAME,
 
     _map = Map(map_name, domain_rand)
 
-    randomizer = domain_rand ? Randomizer() : nothing
-    randomization_settings = nothing
+    randomizer, randomization_settings = nothing, nothing
+    if domain_rand
+        randomizer = Randomizer()
+        randomization_settings = randomize(randomizer)
+    end
 
     delta_time = 1f0 / frame_rate
 
@@ -142,7 +149,7 @@ function FixedSimParams(map_name::String=DEFAULT_MAP_NAME,
                     accept_start_angle_deg, full_transparency, user_tile_start,
                     distortion, randomize_maps_on_reset, camera_model,
                     map_names, undistort, horizon_color, ground_color, wheel_dist, cam_height,
-                    cam_angle, cam_fov_y, cam_offset)
+                    cam_angle, cam_fov_y, cam_offset, raytrace, train)
 end
 
 function reset!(fsp::FixedSimParams)
@@ -172,26 +179,6 @@ function reset!(fsp::FixedSimParams)
             fsp.horizon_color = _perturb(fsp, ones(Float32, 3)*0.9f0, 0.4f0)
         end
     end
-
-    # Setup some basic lighting with a far away sun
-    if fsp.domain_rand
-        light_pos = fsp.randomization_settings["light_pos"]
-    else
-        light_pos = [-40f0, 200f0, 100f0]
-    end
-
-    ambient = _perturb(fsp, ones(Float32, 3)*0.5f0, 0.3f0)
-    # XXX: diffuse is not used?
-    diffuse = _perturb(fsp, ones(Float32, 3)*0.7f0, 0.3f0)
-    #=
-    from pyglet import gl
-    gl.glLightfv(gl.GL_LIGHT0, gl.GL_POSITION, (gl.GLfloat * 4)(*light_pos))
-    gl.glLightfv(gl.GL_LIGHT0, gl.GL_AMBIENT, (gl.GLfloat * 4)(*ambient))
-    gl.glLightfv(gl.GL_LIGHT0, gl.GL_DIFFUSE, (gl.GLfloat * 4)(0.5, 0.5, 0.5, 1.0))
-    gl.glEnable(gl.GL_LIGHT0)
-    gl.glEnable(gl.GL_LIGHTING)
-    gl.glEnable(gl.GL_COLOR_MATERIAL)
-    =#
 
     # Ground color
     fsp.ground_color = _perturb(fsp, GROUND_COLOR, 0.3f0)
@@ -236,7 +223,7 @@ function reset!(fsp::FixedSimParams)
         rng = fsp.domain_rand ? fsp.rng : nothing
         # Randomize the tile texture
         # comment till textures are implemented
-        #tile["texture"] = Graphics.get(tile["kind"], rng)
+        tile["texture"] = Graphics.get(tile["kind"], fsp.rng)
 
         # Random tile color multiplier
         tile["color"] = _perturb(fsp, Vec3([1f0]), 0.2f0)
@@ -245,13 +232,13 @@ function reset!(fsp::FixedSimParams)
     # Randomize object parameters
     for obj in _objects(fsp)
         # Randomize the object color
-        _set_color!(obj, _perturb(fsp, ones(Float32, 3), 0.3f0))
+        _set_color!(obj, _perturb(fsp, Vec3([1f0]), 0.3f0))
 
         # Randomize whether the object is visible or not
         if _optional(obj) && fsp.domain_rand
-            _set_visible!(fsp, rand(fsp.rng, 0:1) == 0)
+            _set_visible!(obj, rand(fsp.rng, 0:1) == 0)
         else
-            _set_visible!(fsp, true)
+            _set_visible!(obj, true)
         end
     end
 
@@ -400,7 +387,7 @@ end
 
 Zygote.@nograd _valid_pose
 
-function _collision(fsp::FixedSimParams, agent_corners)
+function _collision(fsp::FixedSimParams, agent_corners::Matrix{Float32})
     ##
     #Tensor-based OBB Collision detection
     ##
@@ -433,7 +420,7 @@ end
 # FIXME: this does not follow the same signature as WorldOb
 # NOTE: This is actually function meant for DuckiebotObj, defined here to break
 #       cyclic dependency of types
-function step!(db_obj::DuckiebotObj, fp::FixedSimParams, delta_time, closest_curve_point, objects)
+function step!(db_obj::DuckiebotObj, delta_time::Float32, fp::FixedSimParams, closest_curve_point, objects::Vector)
     ##
     #Take a step, implemented as a PID controller
     ##
@@ -462,8 +449,8 @@ function step!(db_obj::DuckiebotObj, fp::FixedSimParams, delta_time, closest_cur
     point_vec = curve_point .- db_obj.wobj.pos
     point_vec = point_vec ./ norm(point_vec)
 
-    dot = dot(get_right_vec(db_obj, db_obj.wobj.angle), point_vec)
-    steering = db_obj.gain * (-dot)
+    dot_ = dot(get_right_vec(db_obj, db_obj.wobj.angle), point_vec)
+    steering = db_obj.gain * (-dot_)
 
-    _update_pos(db_obj, [db_obj.velocity, steering], delta_time)
+    _update_pos(db_obj, Float32.([db_obj.velocity, steering]), delta_time)
 end
