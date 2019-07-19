@@ -54,8 +54,8 @@ function FixedSimParams(map_name::String=DEFAULT_MAP_NAME,
                         seed=nothing,
                         distortion::Bool=false,
                         randomize_maps_on_reset::Bool=false,
-			raytrace::Bool=true,
-			train::Bool=false)
+						raytrace::Bool=true,
+						train::Bool=false)
     #=
     :param map_name:
     :param max_steps:

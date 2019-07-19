@@ -440,7 +440,7 @@ function _proximity_penalty2(sim::Simulator, pos, angle)
     if length(_collidable_centers(sim)) == 0
         static_dist = 0
     # Find safety penalty w.r.t static obstacles
-    else 
+    else
         d = Float32.(norm.(_collidable_centers(sim) .- [pos]))
 
         if !safety_circle_intersection(d, AGENT_SAFETY_RAD, _collidable_safety_radii(sim))
@@ -602,7 +602,7 @@ function draw_ground_road(fp::FixedSimParams)
     scene =  vcat(scene, ground_scene)
 
     grid_width, grid_height = _grid(fp).grid_width, _grid(fp).grid_height
-    
+
     # For each grid tile
     for j in 1:grid_height
         for i in 1:grid_width
@@ -652,7 +652,7 @@ function draw_ground_road(fp::FixedSimParams)
             end
         end
     end
-    
+
     return scene
 end
 
@@ -664,7 +664,7 @@ function _render_img(fp::FixedSimParams, cur_pos::Vector{Float32}, cur_angle::Fl
 
     !fp.graphics && return
     scene = Vector{Triangle}()
-    
+
     pos, angle = cur_pos, cur_angle
     if fp.domain_rand
         pos = pos .+ fp.randomization_settings["camera_noise"]
@@ -672,19 +672,19 @@ function _render_img(fp::FixedSimParams, cur_pos::Vector{Float32}, cur_angle::Fl
 
     x, y, z = pos .+ fp.cam_offset
     dx, dy, dz = get_dir_vec(angle)
-    
+
     # Modelview matrix
     #mv_mat = Matrix{Float32}(I, 4, 4)
-    
+
     if fp.draw_bbox
         y += 0.8f0
     elseif !top_down
         y += fp.cam_height
     end
- 
+
     cam_width, cam_height = fp.camera_width, fp.camera_height
     grid_width, grid_height = _grid(fp).grid_width, _grid(fp).grid_height
-    
+
     # Focal length for raytrace is 1m while that for rasterization is 20mm
     focus = fp.raytrace ? 1f0 : 20f0
 
@@ -715,7 +715,7 @@ function _render_img(fp::FixedSimParams, cur_pos::Vector{Float32}, cur_angle::Fl
             scene = vcat(scene, oΔ)
         end
     end
-    
+
     # Draw the agent's own bounding box
     if fp.draw_bbox
         #corners = get_agent_corners(pos, angle)
@@ -823,7 +823,7 @@ function render_obs(sim::Simulator)
     return im_arr
 end
 
-function render(sim::Simulator, mode="human", close=false)
+function render(sim::Simulator, mode::String="human", close::Bool=false)
     ##
     #Render the environment for human viewing
     ##
