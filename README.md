@@ -15,6 +15,6 @@ julia> ]add https://github.com/tejank10/Duckietown.jl
 ## To Do
 * [x] Textures
 * [x] Test out all the maps
-* [ ] MultiMap mode
+* [x] MultiMap mode
 * [ ] Recording episode/animation
 
