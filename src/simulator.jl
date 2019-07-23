@@ -599,7 +599,7 @@ function draw_ground_road(fp::FixedSimParams)
     trans_mat = scale_mat([50f0, 1f0, 50f0])
     ground_vlist = transform_mat(_grid(fp).ground_vlist, trans_mat)
     ground_scene = triangulate_faces(ground_vlist, nothing, fp.ground_color)
-    #scene =  vcat(scene, ground_scene)
+    scene =  vcat(scene, ground_scene)
 
     grid_width, grid_height = _grid(fp).grid_width, _grid(fp).grid_height
 
@@ -810,7 +810,7 @@ function render_obs(sim::Simulator)
 
         im = raytrace(origin, direction, observation, light, origin, 2)
     else
-        @warn "Rasterization may not work perfectly"
+        #@warn "Rasterization may not work perfectly"
         im = rasterize(cam, observation)#, 0.04f0, 100f0)
     end
 
